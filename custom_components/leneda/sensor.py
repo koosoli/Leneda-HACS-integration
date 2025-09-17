@@ -78,27 +78,17 @@ class LenedaSensor(SensorEntity):
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         now = dt_util.utcnow()
-        start_date = now - timedelta(days=1)
+        start_date = now - timedelta(hours=25)
         end_date = now
 
         try:
-            if self._attr_native_unit_of_measurement == "kWh":
-                data = await self._api_client.async_get_aggregated_metering_data(
-                    self._metering_point_id, self._obis_code, start_date, end_date
-                )
-                if data and data.get("aggregatedTimeSeries"):
-                    self._attr_native_value = data["aggregatedTimeSeries"][0]["value"]
-                else:
-                    self._attr_native_value = None
+            data = await self._api_client.async_get_metering_data(
+                self._metering_point_id, self._obis_code, start_date, end_date
+            )
+            if data and data.get("items"):
+                self._attr_native_value = data["items"][-1]["value"]
             else:
-                start_date = now - timedelta(hours=1)
-                data = await self._api_client.async_get_metering_data(
-                    self._metering_point_id, self._obis_code, start_date, end_date
-                )
-                if data and data.get("items"):
-                    self._attr_native_value = data["items"][-1]["value"]
-                else:
-                    self._attr_native_value = None
+                self._attr_native_value = None
         except Exception as e:
             _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
             self._attr_native_value = None
