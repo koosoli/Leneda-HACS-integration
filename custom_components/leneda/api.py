@@ -1,6 +1,18 @@
 """API client for the Leneda API."""
+import asyncio
 from datetime import datetime, timedelta
 import aiohttp
+from homeassistant.exceptions import HomeAssistantError
+
+class LenedaApiError(HomeAssistantError):
+    """Base exception for Leneda API errors."""
+
+class InvalidAuth(LenedaApiError):
+    """Exception to indicate invalid authentication."""
+
+class NoDataError(LenedaApiError):
+    """Exception to indicate no data found."""
+
 from homeassistant.util import dt as dt_util
 
 from .const import API_BASE_URL, OBIS_CODES
@@ -65,9 +77,16 @@ class LenedaApiClient:
         obis_code = list(OBIS_CODES.keys())[0]
 
         try:
-            await self.async_get_metering_data(
+            data = await self.async_get_metering_data(
                 metering_point_id, obis_code, start_date, end_date
             )
-        except Exception:
-            return False
+            if not data or not data.get("items"):
+                raise NoDataError
+        except aiohttp.ClientResponseError as err:
+            if err.status in (401, 403):
+                raise InvalidAuth from err
+            raise LenedaApiError from err
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise LenedaApiError from err
+
         return True
