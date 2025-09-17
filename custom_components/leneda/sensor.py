@@ -20,8 +20,6 @@ from .api import LenedaApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=15)
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -80,7 +78,7 @@ class LenedaSensor(SensorEntity):
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         now = dt_util.utcnow()
-        start_date = now - timedelta(hours=1)
+        start_date = now - timedelta(hours=25)
         end_date = now
 
         try:
