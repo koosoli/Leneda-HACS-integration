@@ -32,12 +32,7 @@ class LenedaApiClient:
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series"
 
         async with self._session.get(url, headers=headers, params=params) as response:
-            if response.status != 200:
-                return {
-                    "error": True,
-                    "status": response.status,
-                    "text": await response.text(),
-                }
+            response.raise_for_status()
             return await response.json()
 
     async def async_get_aggregated_metering_data(
@@ -59,12 +54,7 @@ class LenedaApiClient:
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
 
         async with self._session.get(url, headers=headers, params=params) as response:
-            if response.status != 200:
-                return {
-                    "error": True,
-                    "status": response.status,
-                    "text": await response.text(),
-                }
+            response.raise_for_status()
             return await response.json()
 
     async def test_credentials(self, metering_point_id: str) -> bool:
@@ -74,9 +64,10 @@ class LenedaApiClient:
         end_date = now
         obis_code = list(OBIS_CODES.keys())[0]
 
-        data = await self.async_get_metering_data(
-            metering_point_id, obis_code, start_date, end_date
-        )
-        if data.get("error"):
+        try:
+            await self.async_get_metering_data(
+                metering_point_id, obis_code, start_date, end_date
+            )
+        except Exception:
             return False
         return True
