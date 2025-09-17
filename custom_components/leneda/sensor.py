@@ -26,6 +26,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Leneda sensors from a config entry."""
+    _LOGGER.debug("Setting up Leneda sensor platform.")
     api_client: LenedaApiClient = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
@@ -33,7 +34,9 @@ async def async_setup_entry(
         LenedaSensor(api_client, metering_point_id, obis_code, details)
         for obis_code, details in OBIS_CODES.items()
     ]
+    _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
     async_add_entities(sensors, True)
+    _LOGGER.debug("Finished setting up Leneda sensor platform.")
 
 
 class LenedaSensor(SensorEntity):
@@ -47,6 +50,7 @@ class LenedaSensor(SensorEntity):
         details: dict,
     ):
         """Initialize the sensor."""
+        _LOGGER.debug(f"Initializing LenedaSensor for obis_code: {obis_code}")
         self._api_client = api_client
         self._metering_point_id = metering_point_id
         self._obis_code = obis_code
