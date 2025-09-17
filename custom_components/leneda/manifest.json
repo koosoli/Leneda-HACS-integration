@@ -7,5 +7,8 @@
   "codeowners": [],
   "requirements": [],
   "iot_class": "cloud_polling",
-  "version": "0.1.5"
+  "version": "0.1.5",
+  "platforms": [
+    "sensor"
+  ]
 }
