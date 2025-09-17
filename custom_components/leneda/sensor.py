@@ -68,8 +68,8 @@ class LenedaSensor(SensorEntity):
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         now = dt_util.utcnow()
-        start_date = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
-        end_date = now.strftime("%Y-%m-%dT%H:%M:%S")
+        start_date = now - timedelta(hours=1)
+        end_date = now
 
         try:
             data = await self._api_client.async_get_metering_data(

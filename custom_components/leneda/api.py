@@ -1,7 +1,9 @@
 """API client for the Leneda API."""
+from datetime import datetime, timedelta
 import aiohttp
+from homeassistant.util import dt as dt_util
 
-from .const import API_BASE_URL
+from .const import API_BASE_URL, OBIS_CODES
 
 
 class LenedaApiClient:
@@ -14,13 +16,17 @@ class LenedaApiClient:
         self._energy_id = energy_id
 
     async def async_get_metering_data(
-        self, metering_point_id: str, obis_code: str, start_date: str, end_date: str
+        self,
+        metering_point_id: str,
+        obis_code: str,
+        start_date: datetime,
+        end_date: datetime,
     ) -> dict:
         """Fetch metering data from the Leneda API."""
         headers = {"X-API-KEY": self._api_key, "X-ENERGY-ID": self._energy_id}
         params = {
-            "startDateTime": f"{start_date}Z",
-            "endDateTime": f"{end_date}Z",
+            "startDateTime": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "obisCode": obis_code,
         }
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series"
@@ -28,3 +34,18 @@ class LenedaApiClient:
         async with self._session.get(url, headers=headers, params=params) as response:
             response.raise_for_status()
             return await response.json()
+
+    async def test_credentials(self, metering_point_id: str) -> bool:
+        """Test credentials against the Leneda API."""
+        now = dt_util.utcnow()
+        start_date = now - timedelta(hours=1)
+        end_date = now
+        obis_code = list(OBIS_CODES.keys())[0]
+
+        try:
+            await self.async_get_metering_data(
+                metering_point_id, obis_code, start_date, end_date
+            )
+        except Exception:
+            return False
+        return True
