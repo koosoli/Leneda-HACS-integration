@@ -26,10 +26,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         energy_id=entry.data[CONF_ENERGY_ID],
     )
 
-    _LOGGER.debug("Forwarding setup to sensor platform.")
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    # _LOGGER.debug("Forwarding setup to sensor platform.")
+    # hass.async_create_task(
+    #     hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    # )
 
     return True
 
