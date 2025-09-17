@@ -27,17 +27,18 @@ async def async_setup_entry(
 ) -> None:
     """Set up Leneda sensors from a config entry."""
     _LOGGER.debug("Setting up Leneda sensor platform.")
-    api_client: LenedaApiClient = hass.data[DOMAIN][entry.entry_id]
-    metering_point_id = entry.data[CONF_METERING_POINT_ID]
+    _LOGGER.debug("Leneda sensor platform loaded, but sensor creation is disabled for debugging.")
+    # api_client: LenedaApiClient = hass.data[DOMAIN][entry.entry_id]
+    # metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    sensors = [
-        LenedaSensor(api_client, metering_point_id, obis_code, details)
-        for obis_code, details in OBIS_CODES.items()
-    ]
-    _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
-    _LOGGER.debug("Adding sensor entities.")
-    async_add_entities(sensors, True)
-    _LOGGER.debug("Finished setting up Leneda sensor platform.")
+    # sensors = [
+    #     LenedaSensor(api_client, metering_point_id, obis_code, details)
+    #     for obis_code, details in OBIS_CODES.items()
+    # ]
+    # _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
+    # _LOGGER.debug("Adding sensor entities.")
+    # async_add_entities(sensors, True)
+    # _LOGGER.debug("Finished setting up Leneda sensor platform.")
 
 
 class LenedaSensor(SensorEntity):
