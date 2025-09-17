@@ -57,6 +57,12 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         elif details["unit"] == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif details["unit"] == "kVAR":
+            self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif details["unit"] in ("m³", "Nm³"):
+            self._attr_device_class = SensorDeviceClass.GAS
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
 
         self._attr_icon = "mdi:flash"
         self._attr_device_info = DeviceInfo(
@@ -87,7 +93,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
     def extra_state_attributes(self) -> dict[str, str] | None:
         """Return the state attributes."""
         if self.coordinator.data:
-            last_updated = self.coordinator.data.get(f"{self._obis_code}_last_updated")
-            if last_updated:
-                return {"last_updated": last_updated}
+            data_timestamp = self.coordinator.data.get(f"{self._obis_code}_data_timestamp")
+            if data_timestamp:
+                return {"data_timestamp": data_timestamp}
         return None
