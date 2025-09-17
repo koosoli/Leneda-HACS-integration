@@ -72,7 +72,7 @@ class LenedaApiClient:
     async def test_credentials(self, metering_point_id: str) -> bool:
         """Test credentials against the Leneda API."""
         now = dt_util.utcnow()
-        start_date = now - timedelta(hours=1)
+        start_date = now - timedelta(hours=25)
         end_date = now
         obis_code = list(OBIS_CODES.keys())[0]
 
