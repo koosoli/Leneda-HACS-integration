@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -29,9 +30,10 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up Leneda sensor platform.")
     api_client: LenedaApiClient = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
+    version = hass.data[DOMAIN].get("version")
 
     sensors = [
-        LenedaSensor(api_client, metering_point_id, obis_code, details)
+        LenedaSensor(api_client, metering_point_id, obis_code, details, version)
         for obis_code, details in OBIS_CODES.items()
     ]
     _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
@@ -48,6 +50,7 @@ class LenedaSensor(SensorEntity):
         metering_point_id: str,
         obis_code: str,
         details: dict,
+        version: str | None,
     ):
         """Initialize the sensor."""
         _LOGGER.debug(f"Initializing LenedaSensor for obis_code: {obis_code}")
@@ -64,6 +67,13 @@ class LenedaSensor(SensorEntity):
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_icon = "mdi:flash"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, metering_point_id)},
+            name=f"Leneda ({metering_point_id})",
+            manufacturer="Leneda",
+            model="Metering Point",
+            sw_version=version,
+        )
 
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
