@@ -2,10 +2,9 @@
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import LenedaApiClient
+from .api import InvalidAuth, LenedaApiClient, LenedaApiError, NoDataError
 from .const import (
     CONF_API_KEY,
     CONF_ENERGY_ID,
@@ -26,15 +25,22 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Leneda config flow started.")
         errors = {}
         if user_input is not None:
+            session = async_get_clientsession(self.hass)
+            api_client = LenedaApiClient(
+                session, user_input[CONF_API_KEY], user_input[CONF_ENERGY_ID]
+            )
             try:
-                await self._test_credentials(
-                    user_input[CONF_API_KEY],
-                    user_input[CONF_ENERGY_ID],
-                    user_input[CONF_METERING_POINT_ID],
-                )
+                await api_client.test_credentials(user_input[CONF_METERING_POINT_ID])
                 return self.async_create_entry(title="Leneda", data=user_input)
-            except Exception:
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except NoDataError:
+                errors["base"] = "no_data"
+            except LenedaApiError:
                 errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during Leneda setup")
+                errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="user",
@@ -47,10 +53,3 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
-
-    async def _test_credentials(self, api_key, energy_id, metering_point_id):
-        """Test credentials against Leneda API."""
-        session = async_get_clientsession(self.hass)
-        client = LenedaApiClient(session, api_key, energy_id)
-        if not await client.test_credentials(metering_point_id):
-            raise Exception("Cannot connect")

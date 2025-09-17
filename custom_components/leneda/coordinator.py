@@ -1,6 +1,7 @@
 """DataUpdateCoordinator for the Leneda integration."""
 from __future__ import annotations
 
+import asyncio
 import async_timeout
 from datetime import timedelta
 import logging
@@ -32,8 +33,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         self.api_client = api_client
         self.metering_point_id = metering_point_id
 
-    async def _async_update_data(self) -> dict[str, float]:
-        """Fetch data from the Leneda API."""
+    async def _async_update_data(self) -> dict[str, float | None]:
+        """Fetch data from the Leneda API concurrently."""
         _LOGGER.debug("Fetching data from Leneda API")
         now = dt_util.utcnow()
         # Use a 25-hour window to ensure we get data even if it's not recent
@@ -41,18 +42,32 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         end_date = now
 
         try:
-            # Using async_timeout is a good practice for API calls
             async with async_timeout.timeout(30):
-                data = {}
-                for obis_code in OBIS_CODES:
-                    api_data = await self.api_client.async_get_metering_data(
+                tasks = [
+                    self.api_client.async_get_metering_data(
                         self.metering_point_id, obis_code, start_date, end_date
                     )
-                    if api_data and api_data.get("items"):
-                        data[obis_code] = api_data["items"][-1]["value"]
+                    for obis_code in OBIS_CODES
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                data = {}
+                for obis_code, result in zip(OBIS_CODES.keys(), results):
+                    if isinstance(result, Exception):
+                        _LOGGER.warning(
+                            "Error fetching data for OBIS code %s: %s",
+                            obis_code,
+                            result,
+                        )
+                        data[obis_code] = None
+                    elif result and result.get("items"):
+                        data[obis_code] = result["items"][-1]["value"]
                     else:
                         data[obis_code] = None
                 return data
+        except asyncio.TimeoutError as err:
+            _LOGGER.error("Timeout fetching Leneda data: %s", err)
+            raise UpdateFailed(f"Timeout communicating with API: {err}") from err
         except Exception as err:
             _LOGGER.error("Error fetching Leneda data: %s", err)
             raise UpdateFailed(f"Error communicating with API: {err}") from err

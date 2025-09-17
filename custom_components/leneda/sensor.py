@@ -80,6 +80,5 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         return (
             super().available
             and self.coordinator.data is not None
-            and self._obis_code in self.coordinator.data
-            and self.coordinator.data[self._obis_code] is not None
+            and self.coordinator.data.get(self._obis_code) is not None
         )
