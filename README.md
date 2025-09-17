@@ -1,0 +1,1 @@
+# Leneda-HACS-integration
