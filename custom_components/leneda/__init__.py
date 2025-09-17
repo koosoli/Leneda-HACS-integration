@@ -1,7 +1,10 @@
 """The Leneda integration."""
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -28,6 +31,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_key=entry.data[CONF_API_KEY],
         energy_id=entry.data[CONF_ENERGY_ID],
     )
+
+    manifest_path = Path(__file__).parent / "manifest.json"
+    with manifest_path.open() as manifest_file:
+        manifest_data = json.load(manifest_file)
+    hass.data[DOMAIN]["version"] = manifest_data.get("version")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
