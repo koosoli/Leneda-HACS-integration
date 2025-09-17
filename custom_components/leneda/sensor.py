@@ -35,6 +35,7 @@ async def async_setup_entry(
         for obis_code, details in OBIS_CODES.items()
     ]
     _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
+    _LOGGER.debug("Adding sensor entities.")
     async_add_entities(sensors, True)
     _LOGGER.debug("Finished setting up Leneda sensor platform.")
 
