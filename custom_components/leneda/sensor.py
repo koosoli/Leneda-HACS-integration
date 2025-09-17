@@ -81,25 +81,45 @@ class LenedaSensor(SensorEntity):
         start_date = now - timedelta(hours=25)
         end_date = now
 
+        data = None
         try:
             # Use time-series for instantaneous values (power)
             if self._attr_native_unit_of_measurement in ("kW", "kVAR"):
                 data = await self._api_client.async_get_metering_data(
                     self._metering_point_id, self._obis_code, start_date, end_date
                 )
-                if data and data.get("items"):
+                if data and not data.get("error") and data.get("items"):
                     self._attr_native_value = data["items"][-1]["value"]
                 else:
                     self._attr_native_value = None
+
             # Use aggregated for cumulative values (energy, volume)
             else:
                 data = await self._api_client.async_get_aggregated_metering_data(
                     self._metering_point_id, self._obis_code, start_date, end_date
                 )
-                if data and data.get("aggregatedTimeSeries"):
+                if data and not data.get("error") and data.get("aggregatedTimeSeries"):
                     self._attr_native_value = data["aggregatedTimeSeries"][0]["value"]
                 else:
                     self._attr_native_value = None
+
+            # Handle API errors or empty data for logging
+            if data and data.get("error"):
+                _LOGGER.warning(
+                    "Leneda API error for sensor %s (OBIS %s): Status %s, Response: %s",
+                    self.name,
+                    self._obis_code,
+                    data.get("status"),
+                    data.get("text"),
+                )
+            elif self._attr_native_value is None:
+                _LOGGER.info(
+                    "Leneda API returned no data for sensor %s (OBIS %s). Full response: %s",
+                    self.name,
+                    self._obis_code,
+                    data,
+                )
+
         except Exception as e:
             _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
             self._attr_native_value = None
