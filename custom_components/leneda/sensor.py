@@ -36,6 +36,10 @@ async def async_setup_entry(
         LenedaSensor(api_client, metering_point_id, obis_code, details, version)
         for obis_code, details in OBIS_CODES.items()
     ]
+
+    # Add monthly energy sensor
+    sensors.append(LenedaMonthlyEnergySensor(api_client, metering_point_id, version))
+
     _LOGGER.debug(f"Found {len(sensors)} sensors to create.")
     async_add_entities(sensors, True)
     _LOGGER.debug("Finished setting up Leneda sensor platform.")
@@ -78,17 +82,84 @@ class LenedaSensor(SensorEntity):
     async def async_update(self) -> None:
         """Fetch new state data for the sensor."""
         now = dt_util.utcnow()
-        start_date = now - timedelta(hours=25)
-        end_date = now
+
+        if self._obis_code == "7-20:99.33.17":
+            start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            next_month = start_date.replace(day=28) + timedelta(days=4)
+            end_date = next_month - timedelta(days=next_month.day)
+            try:
+                data = await self._api_client.async_get_aggregated_metering_data(
+                    self._metering_point_id, self._obis_code, start_date, end_date
+                )
+                if data and data.get("aggregatedTimeSeries"):
+                    self._attr_native_value = data["aggregatedTimeSeries"][0]["value"]
+                else:
+                    self._attr_native_value = None
+            except Exception as e:
+                _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
+                self._attr_native_value = None
+        else:
+            start_date = now - timedelta(hours=25)
+            end_date = now
+
+            try:
+                data = await self._api_client.async_get_metering_data(
+                    self._metering_point_id, self._obis_code, start_date, end_date
+                )
+                if data and data.get("items"):
+                    self._attr_native_value = data["items"][-1]["value"]
+                else:
+                    self._attr_native_value = None
+            except Exception as e:
+                _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
+                self._attr_native_value = None
+
+
+class LenedaMonthlyEnergySensor(SensorEntity):
+    """Representation of a Leneda monthly energy sensor."""
+
+    def __init__(
+        self,
+        api_client: LenedaApiClient,
+        metering_point_id: str,
+        version: str | None,
+    ):
+        """Initialize the sensor."""
+        _LOGGER.debug("Initializing LenedaMonthlyEnergySensor")
+        self._api_client = api_client
+        self._metering_point_id = metering_point_id
+        self._obis_code = "1-1:1.29.0"  # Using active consumption code
+        self._attr_name = "Leneda Monthly Consumed Energy"
+        self._attr_unique_id = f"{metering_point_id}_monthly_consumed_energy"
+        self._attr_native_unit_of_measurement = "kWh"
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:flash"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, metering_point_id)},
+            name=f"Leneda ({metering_point_id})",
+            manufacturer="Leneda",
+            model="Metering Point",
+            sw_version=version,
+        )
+
+    async def async_update(self) -> None:
+        """Fetch new state data for the sensor."""
+        now = dt_util.utcnow()
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = start_date.replace(day=28) + timedelta(days=4)
+        end_date = next_month - timedelta(days=next_month.day)
 
         try:
-            data = await self._api_client.async_get_metering_data(
+            data = await self._api_client.async_get_aggregated_metering_data(
                 self._metering_point_id, self._obis_code, start_date, end_date
             )
-            if data and data.get("items"):
-                self._attr_native_value = data["items"][-1]["value"]
+            if data and data.get("aggregatedTimeSeries"):
+                self._attr_native_value = data["aggregatedTimeSeries"][0]["value"]
             else:
-                self._attr_native_value = None
+                self._attr_native_value = 0  # Default to 0 if no data
         except Exception as e:
-            _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
+            _LOGGER.error(
+                "Error fetching data for monthly energy sensor %s: %s", self.name, e
+            )
             self._attr_native_value = None
