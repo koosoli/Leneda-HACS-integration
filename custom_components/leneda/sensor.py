@@ -82,13 +82,24 @@ class LenedaSensor(SensorEntity):
         end_date = now
 
         try:
-            data = await self._api_client.async_get_metering_data(
-                self._metering_point_id, self._obis_code, start_date, end_date
-            )
-            if data and data.get("items"):
-                self._attr_native_value = data["items"][-1]["value"]
+            # Use time-series for instantaneous values (power)
+            if self._attr_native_unit_of_measurement in ("kW", "kVAR"):
+                data = await self._api_client.async_get_metering_data(
+                    self._metering_point_id, self._obis_code, start_date, end_date
+                )
+                if data and data.get("items"):
+                    self._attr_native_value = data["items"][-1]["value"]
+                else:
+                    self._attr_native_value = None
+            # Use aggregated for cumulative values (energy, volume)
             else:
-                self._attr_native_value = None
+                data = await self._api_client.async_get_aggregated_metering_data(
+                    self._metering_point_id, self._obis_code, start_date, end_date
+                )
+                if data and data.get("aggregatedTimeSeries"):
+                    self._attr_native_value = data["aggregatedTimeSeries"][0]["value"]
+                else:
+                    self._attr_native_value = None
         except Exception as e:
             _LOGGER.error("Error fetching data for sensor %s: %s", self.name, e)
             self._attr_native_value = None
