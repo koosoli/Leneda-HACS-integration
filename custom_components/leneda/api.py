@@ -35,6 +35,28 @@ class LenedaApiClient:
             response.raise_for_status()
             return await response.json()
 
+    async def async_get_aggregated_metering_data(
+        self,
+        metering_point_id: str,
+        obis_code: str,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> dict:
+        """Fetch aggregated metering data from the Leneda API."""
+        headers = {"X-API-KEY": self._api_key, "X-ENERGY-ID": self._energy_id}
+        params = {
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d"),
+            "obisCode": obis_code,
+            "aggregationLevel": "Infinite",
+            "transformationMode": "Accumulation",
+        }
+        url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
+
+        async with self._session.get(url, headers=headers, params=params) as response:
+            response.raise_for_status()
+            return await response.json()
+
     async def test_credentials(self, metering_point_id: str) -> bool:
         """Test credentials against the Leneda API."""
         now = dt_util.utcnow()
