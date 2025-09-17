@@ -82,3 +82,12 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             and self.coordinator.data is not None
             and self.coordinator.data.get(self._obis_code) is not None
         )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        """Return the state attributes."""
+        if self.coordinator.data:
+            last_updated = self.coordinator.data.get(f"{self._obis_code}_last_updated")
+            if last_updated:
+                return {"last_updated": last_updated}
+        return None
