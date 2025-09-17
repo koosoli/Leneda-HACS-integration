@@ -74,14 +74,25 @@ class LenedaApiClient:
         now = dt_util.utcnow()
         start_date = now - timedelta(hours=25)
         end_date = now
-        obis_code = list(OBIS_CODES.keys())[0]
 
         try:
-            data = await self.async_get_metering_data(
-                metering_point_id, obis_code, start_date, end_date
-            )
-            if not data or not data.get("items"):
+            tasks = [
+                self.async_get_metering_data(
+                    metering_point_id, obis_code, start_date, end_date
+                )
+                for obis_code in OBIS_CODES
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            has_any_data = False
+            for result in results:
+                if isinstance(result, dict) and result.get("items"):
+                    has_any_data = True
+                    break
+
+            if not has_any_data:
                 raise NoDataError
+
         except aiohttp.ClientResponseError as err:
             if err.status in (401, 403):
                 raise InvalidAuth from err
