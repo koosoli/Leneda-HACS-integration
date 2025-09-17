@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES
-from . import LenedaApiClient
+from .api import LenedaApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
