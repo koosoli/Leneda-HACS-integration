@@ -61,7 +61,13 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         )
                         data[obis_code] = None
                     elif result and result.get("items"):
-                        data[obis_code] = result["items"][-1]["value"]
+                        items = result["items"]
+                        if items:
+                            latest_item = max(items, key=lambda x: x["startedAt"])
+                            data[obis_code] = latest_item["value"]
+                            data[f"{obis_code}_last_updated"] = latest_item["startedAt"]
+                        else:
+                            data[obis_code] = None
                     else:
                         data[obis_code] = None
                 return data
