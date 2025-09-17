@@ -1,4 +1,5 @@
 """Config flow for Leneda."""
+import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -13,6 +14,8 @@ from .const import (
     OBIS_CODES,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Leneda."""
@@ -21,6 +24,7 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
+        _LOGGER.debug("Leneda config flow started.")
         errors = {}
         if user_input is not None:
             try:

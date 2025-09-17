@@ -1,6 +1,7 @@
 """The Leneda integration."""
 from __future__ import annotations
 
+import logging
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -14,9 +15,12 @@ from .const import (
     DOMAIN,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Leneda from a config entry."""
+    _LOGGER.debug("Setting up Leneda integration.")
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = LenedaApiClient(
         session=async_get_clientsession(hass),
