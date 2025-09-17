@@ -1,0 +1,10 @@
+{
+  "domain": "leneda",
+  "name": "Leneda",
+  "documentation": "https://leneda.eu/en/docs/api-reference.html",
+  "codeowners": ["@Jules"],
+  "requirements": ["httpx"],
+  "version": "0.0.1",
+  "config_flow": true,
+  "iot_class": "cloud_polling"
+}
