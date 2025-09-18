@@ -72,7 +72,7 @@ class LenedaApiClient:
     async def test_credentials(self, metering_point_id: str) -> bool:
         """Test credentials against the Leneda API."""
         now = dt_util.utcnow()
-        start_date = now - timedelta(hours=25)
+        start_date = now - timedelta(hours=1)
         end_date = now
 
         try:
@@ -84,19 +84,21 @@ class LenedaApiClient:
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            has_any_data = False
+            has_successful_call = False
             for result in results:
-                if isinstance(result, dict) and result.get("items"):
-                    has_any_data = True
+                if isinstance(result, dict):
+                    has_successful_call = True
                     break
 
-            if not has_any_data:
+            if not has_successful_call:
+                # Let's check for auth error explicitly from results
+                for r in results:
+                    if isinstance(r, aiohttp.ClientResponseError) and r.status in (401, 403):
+                        raise InvalidAuth from r
+                # Raise NoDataError if no successful call, and no auth error found.
+                # This keeps it consistent with the original behavior for other errors.
                 raise NoDataError
 
-        except aiohttp.ClientResponseError as err:
-            if err.status in (401, 403):
-                raise InvalidAuth from err
-            raise LenedaApiError from err
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise LenedaApiError from err
 
