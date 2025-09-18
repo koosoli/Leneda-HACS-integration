@@ -105,7 +105,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         super().__init__(coordinator)
         self._obis_code = obis_code
         self._attr_name = details["name"]
-        self._attr_unique_id = f"{metering_point_id}_{obis_code}"
+        self._attr_unique_id = f"{metering_point_id}_{obis_code}_v2"
         self._attr_native_unit_of_measurement = details["unit"]
 
         if details["unit"] == "kW":
@@ -176,7 +176,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         super().__init__(coordinator)
         self._key = sensor_key
         self._attr_name = name
-        self._attr_unique_id = f"{metering_point_id}_{sensor_key}"
+        self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v2"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, metering_point_id)},
