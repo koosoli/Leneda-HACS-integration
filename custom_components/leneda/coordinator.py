@@ -37,8 +37,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from the Leneda API concurrently."""
         _LOGGER.debug("Fetching data from Leneda API")
         now = dt_util.utcnow()
-        # Use a 25-hour window to ensure we get data even if it's not recent
-        start_date = now - timedelta(hours=25)
+        # Use a 1-hour window to ensure we get the latest data.
+        start_date = now - timedelta(hours=1)
         end_date = now
 
         try:

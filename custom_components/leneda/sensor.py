@@ -67,7 +67,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_icon = "mdi:flash"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, metering_point_id)},
-            name=f"Leneda ({metering_point_id})",
+            name=f"Leneda (...{metering_point_id[-4:]})",
             manufacturer="Leneda",
             model="Metering Point",
             sw_version=coordinator.version,
