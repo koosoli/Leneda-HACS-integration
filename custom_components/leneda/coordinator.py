@@ -69,13 +69,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # Tasks for aggregated data
                 # Tasks for aggregated data
                 aggregated_tasks = [
-                    # Daily
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now
-                    ),
                     # Monthly
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
@@ -113,7 +106,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                 ]
                 aggregated_keys = [
-                    "daily_consumption", "daily_production",
                     "monthly_consumption", "monthly_production",
                     "weekly_consumption", "weekly_production",
                     "yesterday_consumption", "yesterday_production",
@@ -121,11 +113,23 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "previous_month_consumption", "previous_month_production",
                 ]
 
-                all_tasks = live_power_tasks + aggregated_tasks
+                # New tasks for hourly data for the current day
+                hourly_tasks = [
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now, "Hour"
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now, "Hour"
+                    ),
+                ]
+                hourly_keys = ["hourly_consumption_data", "hourly_production_data"]
+
+                all_tasks = live_power_tasks + aggregated_tasks + hourly_tasks
                 results = await asyncio.gather(*all_tasks, return_exceptions=True)
 
                 live_power_results = results[:len(live_power_tasks)]
-                aggregated_results = results[len(live_power_tasks):]
+                aggregated_results = results[len(live_power_tasks):len(live_power_tasks) + len(aggregated_tasks)]
+                hourly_results = results[len(live_power_tasks) + len(aggregated_tasks):]
 
                 data = self.data.copy() if self.data else {}
 
@@ -133,8 +137,17 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
                     if isinstance(result, dict) and result.get("items"):
                         latest_item = max(result["items"], key=lambda x: x["startedAt"])
-                        data[obis_code] = latest_item["value"]
+                        value = latest_item["value"]
+                        data[obis_code] = value
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
+
+                        # Calculate 15-minute energy for kW sensors
+                        if OBIS_CODES[obis_code]["unit"] == "kW":
+                            energy_kwh = value * 0.25  # 15 minutes = 0.25 hours
+                            if obis_code == CONSUMPTION_CODE:
+                                data["quarter_hourly_consumption"] = energy_kwh
+                            elif obis_code == PRODUCTION_CODE:
+                                data["quarter_hourly_production"] = energy_kwh
                     elif isinstance(result, Exception):
                         _LOGGER.warning("Error fetching live data for %s: %s. Keeping last known value.", obis_code, result)
 
@@ -159,6 +172,35 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         # Unexpected result type, treat as error
                         if key not in data:
                             data[key] = None
+
+                # Process hourly results to calculate daily totals and last hour
+                for key, result in zip(hourly_keys, hourly_results):
+                    if isinstance(result, dict):
+                        series = result.get("aggregatedTimeSeries")
+                        # Update daily sensor key
+                        daily_key = key.replace("hourly", "daily").replace("_data", "")
+                        # Get last hour's value
+                        hourly_key = key.replace("_data", "")
+
+                        if series:
+                            # Calculate daily total
+                            daily_total = sum(item.get("value", 0) for item in series)
+                            data[daily_key] = daily_total
+
+                            # Get last hour's value
+                            last_hour_item = max(series, key=lambda x: x["startedAt"])
+                            data[hourly_key] = last_hour_item.get("value")
+                        else:
+                            # Successful call, but no data returned. This means 0 energy.
+                            data[daily_key] = 0.0
+                            data[hourly_key] = 0.0
+
+                    elif isinstance(result, Exception):
+                        _LOGGER.warning("Error fetching hourly data for %s: %s", key, result)
+                        daily_key = key.replace("hourly", "daily").replace("_data", "")
+                        if daily_key not in data: data[daily_key] = None
+                        hourly_key = key.replace("_data", "")
+                        if hourly_key not in data: data[hourly_key] = None
 
                 return data
         except (asyncio.TimeoutError, Exception) as err:

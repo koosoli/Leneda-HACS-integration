@@ -44,6 +44,10 @@ async def async_setup_entry(
         "last_week_production": "Last Week's Production",
         "previous_month_consumption": "Previous Month's Consumption",
         "previous_month_production": "Previous Month's Production",
+        "hourly_consumption": "Hourly Consumption",
+        "hourly_production": "Hourly Production",
+        "quarter_hourly_consumption": "15-Minute Consumption",
+        "quarter_hourly_production": "15-Minute Production",
     }
     for sensor_key, name in energy_sensors_to_add.items():
         sensors.append(

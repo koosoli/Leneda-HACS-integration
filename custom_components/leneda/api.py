@@ -53,6 +53,7 @@ class LenedaApiClient:
         obis_code: str,
         start_date: datetime,
         end_date: datetime,
+        aggregation_level: str = "Infinite",
     ) -> dict:
         """Fetch aggregated metering data from the Leneda API."""
         headers = {"X-API-KEY": self._api_key, "X-ENERGY-ID": self._energy_id}
@@ -60,7 +61,7 @@ class LenedaApiClient:
             "startDate": start_date.strftime("%Y-%m-%d"),
             "endDate": end_date.strftime("%Y-%m-%d"),
             "obisCode": obis_code,
-            "aggregationLevel": "Infinite",
+            "aggregationLevel": aggregation_level,
             "transformationMode": "Accumulation",
         }
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
