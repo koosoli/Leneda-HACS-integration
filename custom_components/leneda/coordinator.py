@@ -136,6 +136,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 aggregated_results = results[len(live_power_tasks):]
 
                 data = self.data.copy() if self.data else {}
+
+                # Ensure keys exist before processing, setting a default
+                data.setdefault("c_01_quarter_hourly_consumption", 0.0)
+                data.setdefault("p_01_quarter_hourly_production", 0.0)
+
                 _LOGGER.debug("Processing live power results...")
                 # Process live power results
                 for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
@@ -156,6 +161,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
                     else:
                         _LOGGER.warning("No items found for live data obis_code %s. Response: %s", obis_code, result)
+                        # If this is the main consumption or production, set the 15-min value to 0
+                        if obis_code == CONSUMPTION_CODE:
+                            data["c_01_quarter_hourly_consumption"] = 0.0
+                        elif obis_code == PRODUCTION_CODE:
+                            data["p_01_quarter_hourly_production"] = 0.0
 
 
                 _LOGGER.debug("Processing aggregated results...")
