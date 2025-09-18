@@ -202,6 +202,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         hourly_key = key.replace("_data", "")
                         if hourly_key not in data: data[hourly_key] = None
 
+                # Ensure quarter-hourly keys exist, even if there was no live data
+                if "quarter_hourly_consumption" not in data:
+                    data["quarter_hourly_consumption"] = None
+                if "quarter_hourly_production" not in data:
+                    data["quarter_hourly_production"] = None
+
                 return data
         except (asyncio.TimeoutError, Exception) as err:
             _LOGGER.error("Error fetching Leneda data: %s", err)
