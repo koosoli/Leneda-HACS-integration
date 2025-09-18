@@ -29,6 +29,19 @@ async def async_setup_entry(
         LenedaSensor(coordinator, metering_point_id, obis_code, details)
         for obis_code, details in OBIS_CODES.items()
     ]
+
+    # New sensors for aggregated energy data
+    energy_sensors_to_add = {
+        "daily_consumption": "Daily Consumption",
+        "monthly_consumption": "Monthly Consumption",
+        "daily_production": "Daily Production",
+        "monthly_production": "Monthly Production",
+    }
+    for sensor_key, name in energy_sensors_to_add.items():
+        sensors.append(
+            LenedaEnergySensor(coordinator, metering_point_id, sensor_key, name)
+        )
+
     async_add_entities(sensors)
 
 
@@ -97,3 +110,50 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             if data_timestamp:
                 return {"data_timestamp": data_timestamp}
         return None
+
+
+class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity):
+    """Representation of a Leneda energy sensor for aggregated data."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:chart-bar"
+
+    def __init__(
+        self,
+        coordinator: LenedaDataUpdateCoordinator,
+        metering_point_id: str,
+        sensor_key: str,
+        name: str,
+    ):
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._key = sensor_key
+        self._attr_name = name
+        self._attr_unique_id = f"{metering_point_id}_{sensor_key}"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, metering_point_id)},
+            name=f"Leneda (...{metering_point_id[-4:]})",
+            manufacturer="Leneda",
+            model="Metering Point",
+            sw_version=coordinator.version,
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the state of the sensor."""
+        if self.coordinator.data:
+            return self.coordinator.data.get(self._key)
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return (
+            super().available
+            and self.coordinator.data is not None
+            and self.coordinator.data.get(self._key) is not None
+        )
