@@ -33,9 +33,17 @@ async def async_setup_entry(
     # New sensors for aggregated energy data
     energy_sensors_to_add = {
         "daily_consumption": "Daily Consumption",
-        "monthly_consumption": "Monthly Consumption",
         "daily_production": "Daily Production",
+        "monthly_consumption": "Monthly Consumption",
         "monthly_production": "Monthly Production",
+        "weekly_consumption": "Weekly Consumption",
+        "weekly_production": "Weekly Production",
+        "yesterday_consumption": "Yesterday's Consumption",
+        "yesterday_production": "Yesterday's Production",
+        "last_week_consumption": "Last Week's Consumption",
+        "last_week_production": "Last Week's Production",
+        "previous_month_consumption": "Previous Month's Consumption",
+        "previous_month_production": "Previous Month's Production",
     }
     for sensor_key, name in energy_sensors_to_add.items():
         sensors.append(
