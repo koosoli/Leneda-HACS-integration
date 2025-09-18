@@ -51,25 +51,28 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                data = {}
+                data = self.data.copy() if self.data else {}
+
                 for obis_code, result in zip(OBIS_CODES.keys(), results):
-                    if isinstance(result, Exception):
-                        _LOGGER.warning(
-                            "Error fetching data for OBIS code %s: %s",
-                            obis_code,
-                            result,
-                        )
-                        data[obis_code] = None
-                    elif result and result.get("items"):
-                        items = result["items"]
-                        if items:
-                            latest_item = max(items, key=lambda x: x["startedAt"])
-                            data[obis_code] = latest_item["value"]
-                            data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
-                        else:
-                            data[obis_code] = None
+                    if isinstance(result, dict) and result.get("items"):
+                        # We have new data, update the sensor
+                        latest_item = max(result["items"], key=lambda x: x["startedAt"])
+                        data[obis_code] = latest_item["value"]
+                        data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
                     else:
-                        data[obis_code] = None
+                        # No new data or an error occurred
+                        if isinstance(result, Exception):
+                            _LOGGER.warning(
+                                "Error fetching data for OBIS code %s: %s. Keeping previous value if available.",
+                                obis_code,
+                                result,
+                            )
+                        # For any case without new data, ensure the key exists for the first run.
+                        # If it's not the first run, the old value from self.data is preserved.
+                        if obis_code not in data:
+                            data[obis_code] = None
+                        if f"{obis_code}_data_timestamp" not in data:
+                            data[f"{obis_code}_data_timestamp"] = None
                 return data
         except asyncio.TimeoutError as err:
             _LOGGER.error("Timeout fetching Leneda data: %s", err)
