@@ -1,8 +1,11 @@
 """API client for the Leneda API."""
 import asyncio
 from datetime import datetime, timedelta
+import logging
 import aiohttp
 from homeassistant.exceptions import HomeAssistantError
+
+_LOGGER = logging.getLogger(__name__)
 
 class LenedaApiError(HomeAssistantError):
     """Base exception for Leneda API errors."""
@@ -42,10 +45,13 @@ class LenedaApiClient:
             "obisCode": obis_code,
         }
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series"
+        _LOGGER.debug("Requesting Leneda metering data from %s with params %s", url, params)
 
         async with self._session.get(url, headers=headers, params=params) as response:
             response.raise_for_status()
-            return await response.json()
+            json_response = await response.json()
+            _LOGGER.debug("Leneda metering data response: %s", json_response)
+            return json_response
 
     async def async_get_aggregated_metering_data(
         self,
@@ -65,10 +71,13 @@ class LenedaApiClient:
             "transformationMode": "Accumulation",
         }
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
+        _LOGGER.debug("Requesting Leneda aggregated data from %s with params %s", url, params)
 
         async with self._session.get(url, headers=headers, params=params) as response:
             response.raise_for_status()
-            return await response.json()
+            json_response = await response.json()
+            _LOGGER.debug("Leneda aggregated data response: %s", json_response)
+            return json_response
 
     async def test_credentials(self, metering_point_id: str) -> bool:
         """Test credentials against the Leneda API."""

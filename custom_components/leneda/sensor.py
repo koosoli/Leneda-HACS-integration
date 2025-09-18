@@ -1,5 +1,6 @@
 """Sensor platform for Leneda."""
 from __future__ import annotations
+import logging
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,6 +16,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES
 from .coordinator import LenedaDataUpdateCoordinator
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -25,9 +28,8 @@ async def async_setup_entry(
     coordinator: LenedaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    # Define the complete list of sensors in the desired order
-    # The first element is the key/obis_code, the second is the name, the third is the type
-    # 'energy' for LenedaEnergySensor, 'obis' for LenedaSensor
+    _LOGGER.debug("Setting up Leneda sensors for metering point %s", metering_point_id)
+
     all_sensors_ordered = [
         # Consumption
         ("c_01_quarter_hourly_consumption", "15-Minute Consumption", "energy"),
@@ -67,22 +69,23 @@ async def async_setup_entry(
     ]
 
     sensors = []
+    _LOGGER.debug("Creating sensors in the following order:")
     for key, name, sensor_type in all_sensors_ordered:
+        _LOGGER.debug(f"  - Key: {key}, Name: {name}, Type: {sensor_type}")
         if sensor_type == "energy":
             sensors.append(
                 LenedaEnergySensor(coordinator, metering_point_id, key, name)
             )
         elif sensor_type == "obis":
-            # For OBIS sensors, we need to get the details from OBIS_CODES
             if key in OBIS_CODES:
                 details = OBIS_CODES[key]
-                # The name from the user's list overrides the one in const.py
                 details_with_override = details.copy()
                 details_with_override["name"] = name
                 sensors.append(
                     LenedaSensor(coordinator, metering_point_id, key, details_with_override)
                 )
 
+    _LOGGER.debug("Adding %d entities.", len(sensors))
     async_add_entities(sensors)
 
 

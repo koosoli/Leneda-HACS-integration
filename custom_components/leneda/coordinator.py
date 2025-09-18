@@ -35,7 +35,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, float | None]:
         """Fetch data from the Leneda API concurrently."""
-        _LOGGER.debug("Fetching data from Leneda API")
+        _LOGGER.debug("--- Starting Leneda Data Update ---")
         now = dt_util.utcnow()
 
         try:
@@ -57,6 +57,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 PRODUCTION_CODE = "1-1:2.29.0"
 
                 # Tasks for live power data (OBIS codes)
+                _LOGGER.debug("Setting up tasks for live power data...")
                 live_power_tasks = [
                     self.api_client.async_get_metering_data(
                         self.metering_point_id, obis_code, live_data_start_dt, now
@@ -64,6 +65,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
 
                 # Tasks for aggregated data
+                _LOGGER.debug("Setting up tasks for aggregated data...")
                 aggregated_tasks = [
                     # Hourly (Current hour)
                     self.api_client.async_get_aggregated_metering_data(
@@ -125,21 +127,25 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_08_previous_month_consumption", "p_08_previous_month_production",
                 ]
 
+                _LOGGER.debug("Gathering all API tasks...")
                 all_tasks = live_power_tasks + aggregated_tasks
                 results = await asyncio.gather(*all_tasks, return_exceptions=True)
+                _LOGGER.debug("All API tasks gathered.")
 
                 live_power_results = results[:len(live_power_tasks)]
                 aggregated_results = results[len(live_power_tasks):]
 
                 data = self.data.copy() if self.data else {}
-
+                _LOGGER.debug("Processing live power results...")
                 # Process live power results
                 for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
                     if isinstance(result, dict) and result.get("items"):
+                        _LOGGER.debug(f"Processing live data for {obis_code}, result: {result}")
                         latest_item = max(result["items"], key=lambda x: dt_util.parse_datetime(x["startedAt"]))
                         value = latest_item["value"]
                         data[obis_code] = value
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
+                        _LOGGER.debug(f"Latest item for {obis_code}: {latest_item}")
 
                         # 15-Minute Energy Calculation
                         if obis_code == CONSUMPTION_CODE:
@@ -147,27 +153,37 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         elif obis_code == PRODUCTION_CODE:
                             data["p_01_quarter_hourly_production"] = value * 0.25
                     elif isinstance(result, Exception):
-                        _LOGGER.warning("Error fetching live data for %s: %s. Keeping last known value.", obis_code, result)
+                        _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
+                    else:
+                        _LOGGER.warning("No items found for live data obis_code %s. Response: %s", obis_code, result)
 
+
+                _LOGGER.debug("Processing aggregated results...")
                 # Process aggregated results
                 for key, result in zip(aggregated_keys, aggregated_results):
                     if isinstance(result, dict):
+                        _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
                         if series:
                             if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly
-                                # For hourly, we need the last value in the series for the current hour
                                 data[key] = series[-1].get("value") if series else 0.0
+                                _LOGGER.debug(f"Processed hourly data for {key}: {data[key]}")
                             else: # Other aggregated
                                 data[key] = series[0].get("value") if series else 0.0
+                                _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
                         else:
                             data[key] = 0.0
+                            _LOGGER.debug(f"No aggregated time series for {key}, setting value to 0.0")
                     elif isinstance(result, Exception):
-                        _LOGGER.warning("Error fetching aggregated data for %s: %s", key, result)
+                        _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
                         if key not in data: data[key] = None
                     else:
+                        _LOGGER.warning("Unexpected result type for aggregated data %s. Response: %s", key, result)
                         if key not in data: data[key] = None
 
+                _LOGGER.debug("--- Leneda Data Update Finished ---")
+                _LOGGER.debug("Final coordinated data: %s", data)
                 return data
         except (asyncio.TimeoutError, Exception) as err:
-            _LOGGER.error("Error fetching Leneda data: %s", err)
+            _LOGGER.error("Fatal error during Leneda data fetch: %s", err, exc_info=True)
             raise UpdateFailed(f"Error communicating with API: {err}") from err
