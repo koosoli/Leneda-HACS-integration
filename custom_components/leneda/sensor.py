@@ -30,26 +30,29 @@ async def async_setup_entry(
         for obis_code, details in OBIS_CODES.items()
     ]
 
-    # New sensors for aggregated energy data
-    energy_sensors_to_add = {
-        "daily_consumption": "Daily Consumption",
-        "daily_production": "Daily Production",
-        "monthly_consumption": "Monthly Consumption",
-        "monthly_production": "Monthly Production",
-        "weekly_consumption": "Weekly Consumption",
-        "weekly_production": "Weekly Production",
-        "yesterday_consumption": "Yesterday's Consumption",
-        "yesterday_production": "Yesterday's Production",
-        "last_week_consumption": "Last Week's Consumption",
-        "last_week_production": "Last Week's Production",
-        "previous_month_consumption": "Previous Month's Consumption",
-        "previous_month_production": "Previous Month's Production",
-        "hourly_consumption": "Hourly Consumption",
-        "hourly_production": "Hourly Production",
-        "quarter_hourly_consumption": "15-Minute Consumption",
-        "quarter_hourly_production": "15-Minute Production",
-    }
-    for sensor_key, name in energy_sensors_to_add.items():
+    # Define the order and new names for the energy sensors
+    energy_sensors_to_add = [
+        # Consumption
+        ("quarter_hourly_consumption", "15-Minute Consumption"),
+        ("hourly_consumption", "Hourly Consumption"),
+        ("daily_consumption", "Current Day Consumption"),
+        ("yesterday_consumption", "Yesterday's Consumption"),
+        ("weekly_consumption", "Current Week Consumption"),
+        ("last_week_consumption", "Last Week's Consumption"),
+        ("monthly_consumption", "Current Month Consumption"),
+        ("previous_month_consumption", "Previous Month's Consumption"),
+        # Production
+        ("quarter_hourly_production", "15-Minute Production"),
+        ("hourly_production", "Hourly Production"),
+        ("daily_production", "Current Day Production"),
+        ("yesterday_production", "Yesterday's Production"),
+        ("weekly_production", "Current Week Production"),
+        ("last_week_production", "Last Week's Production"),
+        ("monthly_production", "Current Month Production"),
+        ("previous_month_production", "Previous Month's Production"),
+    ]
+
+    for sensor_key, name in energy_sensors_to_add:
         sensors.append(
             LenedaEnergySensor(coordinator, metering_point_id, sensor_key, name)
         )
