@@ -25,37 +25,63 @@ async def async_setup_entry(
     coordinator: LenedaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    sensors = [
-        LenedaSensor(coordinator, metering_point_id, obis_code, details)
-        for obis_code, details in OBIS_CODES.items()
-    ]
-
-    # Define the order and new names for the energy sensors
-    energy_sensors_to_add = [
+    # Define the complete list of sensors in the desired order
+    # The first element is the key/obis_code, the second is the name, the third is the type
+    # 'energy' for LenedaEnergySensor, 'obis' for LenedaSensor
+    all_sensors_ordered = [
         # Consumption
-        ("c_01_quarter_hourly_consumption", "15-Minute Consumption"),
-        ("c_02_hourly_consumption", "Hourly Consumption"),
-        ("c_03_daily_consumption", "Current Day Consumption"),
-        ("c_04_yesterday_consumption", "Yesterday's Consumption"),
-        ("c_05_weekly_consumption", "Current Week Consumption"),
-        ("c_06_last_week_consumption", "Last Week's Consumption"),
-        ("c_07_monthly_consumption", "Current Month Consumption"),
-        ("c_08_previous_month_consumption", "Previous Month's Consumption"),
+        ("c_01_quarter_hourly_consumption", "15-Minute Consumption", "energy"),
+        ("c_02_hourly_consumption", "Hourly Consumption", "energy"),
+        ("c_03_daily_consumption", "Current Day Consumption", "energy"),
+        ("c_04_yesterday_consumption", "Yesterday's Consumption", "energy"),
+        ("c_05_weekly_consumption", "Current Week Consumption", "energy"),
+        ("c_06_last_week_consumption", "Last Week's Consumption", "energy"),
+        ("c_07_monthly_consumption", "Current Month Consumption", "energy"),
+        ("c_08_previous_month_consumption", "Previous Month's Consumption", "energy"),
+        ("1-1:1.29.0", "Measured Active Consumption", "obis"),
+        ("1-1:3.29.0", "Measured Reactive Consumption", "obis"),
+        ("7-20:99.33.17", "Measured Consumed Energy", "obis"),
+        ("7-1:99.23.15", "Measured Consumed Volume", "obis"),
+        ("7-1:99.23.17", "Measured Consumed Standard Volume", "obis"),
+        ("1-65:1.29.1", "Consumption Covered by Production (Layer 1)", "obis"),
+        ("1-65:1.29.3", "Consumption Covered by Production (Layer 2)", "obis"),
+        ("1-65:1.29.2", "Consumption Covered by Production (Layer 3)", "obis"),
+        ("1-65:1.29.4", "Consumption Covered by Production (Layer 4)", "obis"),
+        ("1-65:1.29.9", "Remaining Consumption After Sharing", "obis"),
         # Production
-        ("p_01_quarter_hourly_production", "15-Minute Production"),
-        ("p_02_hourly_production", "Hourly Production"),
-        ("p_03_daily_production", "Current Day Production"),
-        ("p_04_yesterday_production", "Yesterday's Production"),
-        ("p_05_weekly_production", "Current Week Production"),
-        ("p_06_last_week_production", "Last Week's Production"),
-        ("p_07_monthly_production", "Current Month Production"),
-        ("p_08_previous_month_production", "Previous Month's Production"),
+        ("p_01_quarter_hourly_production", "15-Minute Production", "energy"),
+        ("p_02_hourly_production", "Hourly Production", "energy"),
+        ("p_03_daily_production", "Current Day Production", "energy"),
+        ("p_04_yesterday_production", "Yesterday's Production", "energy"),
+        ("p_05_weekly_production", "Current Week Production", "energy"),
+        ("p_06_last_week_production", "Last Week's Production", "energy"),
+        ("p_07_monthly_production", "Current Month Production", "energy"),
+        ("p_08_previous_month_production", "Previous Month's Production", "energy"),
+        ("1-1:2.29.0", "Measured Active Production", "obis"),
+        ("1-1:4.29.0", "Measured Reactive Production", "obis"),
+        ("1-65:2.29.1", "Production Shared (Layer 1)", "obis"),
+        ("1-65:2.29.3", "Production Shared (Layer 2)", "obis"),
+        ("1-65:2.29.2", "Production Shared (Layer 3)", "obis"),
+        ("1-65:2.29.4", "Production Shared (Layer 4)", "obis"),
+        ("1-65:2.29.9", "Remaining Production After Sharing", "obis"),
     ]
 
-    for sensor_key, name in energy_sensors_to_add:
-        sensors.append(
-            LenedaEnergySensor(coordinator, metering_point_id, sensor_key, name)
-        )
+    sensors = []
+    for key, name, sensor_type in all_sensors_ordered:
+        if sensor_type == "energy":
+            sensors.append(
+                LenedaEnergySensor(coordinator, metering_point_id, key, name)
+            )
+        elif sensor_type == "obis":
+            # For OBIS sensors, we need to get the details from OBIS_CODES
+            if key in OBIS_CODES:
+                details = OBIS_CODES[key]
+                # The name from the user's list overrides the one in const.py
+                details_with_override = details.copy()
+                details_with_override["name"] = name
+                sensors.append(
+                    LenedaSensor(coordinator, metering_point_id, key, details_with_override)
+                )
 
     async_add_entities(sensors)
 

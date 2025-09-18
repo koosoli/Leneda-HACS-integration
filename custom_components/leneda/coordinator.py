@@ -37,13 +37,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from the Leneda API concurrently."""
         _LOGGER.debug("Fetching data from Leneda API")
         now = dt_util.utcnow()
-        end_date = now
-        today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_date = today_start_dt  # Fetch data from the beginning of the day
 
         try:
             async with async_timeout.timeout(30):
-                # Define date ranges for aggregated data
+                # Define date ranges
+                today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                live_data_start_dt = now - timedelta(minutes=60) # Fetch last 60 mins for live data
                 month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 week_start_dt = today_start_dt - timedelta(days=now.weekday())
                 yesterday_start_dt = today_start_dt - timedelta(days=1)
@@ -54,26 +53,31 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 end_of_last_month = first_day_of_current_month - timedelta(microseconds=1)
                 start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
 
-                # Tasks for live power data
+                # Tasks for live power data (OBIS codes)
                 live_power_tasks = [
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id, obis_code, start_date, end_date
+                        self.metering_point_id, obis_code, live_data_start_dt, now
                     ) for obis_code in OBIS_CODES
                 ]
 
                 # Tasks for aggregated data
-                # Tasks for aggregated data
                 aggregated_tasks = [
-                    # Monthly
+                    # Hourly (Current hour)
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
+                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now, aggregation_level="Hour"
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, now
+                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now, aggregation_level="Hour"
+                    ),
+                    # Daily
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now
                     ),
                     # Weekly
                     self.api_client.async_get_aggregated_metering_data(
@@ -81,6 +85,13 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, week_start_dt, now
+                    ),
+                    # Monthly
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, now
                     ),
                     # Yesterday
                     self.api_client.async_get_aggregated_metering_data(
@@ -105,8 +116,10 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                 ]
                 aggregated_keys = [
-                    "c_07_monthly_consumption", "p_07_monthly_production",
+                    "c_02_hourly_consumption", "p_02_hourly_production",
+                    "c_03_daily_consumption", "p_03_daily_production",
                     "c_05_weekly_consumption", "p_05_weekly_production",
+                    "c_07_monthly_consumption", "p_07_monthly_production",
                     "c_04_yesterday_consumption", "p_04_yesterday_production",
                     "c_06_last_week_consumption", "p_06_last_week_production",
                     "c_08_previous_month_consumption", "p_08_previous_month_production",
@@ -123,68 +136,36 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # Process live power results
                 for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
                     if isinstance(result, dict) and result.get("items"):
-                        latest_item = max(result["items"], key=lambda x: x["startedAt"])
+                        latest_item = max(result["items"], key=lambda x: dt_util.parse_datetime(x["startedAt"]))
                         value = latest_item["value"]
                         data[obis_code] = value
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
 
-                        # Calculations for main consumption and production sensors
-                        if obis_code == CONSUMPTION_CODE or obis_code == PRODUCTION_CODE:
-                            # 15-Minute Energy
-                            energy_kwh = value * 0.25  # 15 minutes = 0.25 hours
-
-                            # Daily total from all items
-                            daily_total_kwh = sum(item["value"] * 0.25 for item in result["items"])
-
-                            # Hourly total for the last completed hour
-                            last_hour_start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
-                            last_hour_end = now.replace(minute=0, second=0, microsecond=0)
-
-                            hourly_items = [
-                                item for item in result["items"]
-                                if last_hour_start <= dt_util.parse_datetime(item["startedAt"]) < last_hour_end
-                            ]
-                            hourly_total_kwh = sum(item["value"] * 0.25 for item in hourly_items)
-
-                            if obis_code == CONSUMPTION_CODE:
-                                data["c_01_quarter_hourly_consumption"] = energy_kwh
-                                data["c_03_daily_consumption"] = daily_total_kwh
-                                data["c_02_hourly_consumption"] = hourly_total_kwh
-                            else: # PRODUCTION_CODE
-                                data["p_01_quarter_hourly_production"] = energy_kwh
-                                data["p_03_daily_production"] = daily_total_kwh
-                                data["p_02_hourly_production"] = hourly_total_kwh
+                        # 15-Minute Energy Calculation
+                        if obis_code == CONSUMPTION_CODE:
+                            data["c_01_quarter_hourly_consumption"] = value * 0.25
+                        elif obis_code == PRODUCTION_CODE:
+                            data["p_01_quarter_hourly_production"] = value * 0.25
                     elif isinstance(result, Exception):
                         _LOGGER.warning("Error fetching live data for %s: %s. Keeping last known value.", obis_code, result)
 
                 # Process aggregated results
                 for key, result in zip(aggregated_keys, aggregated_results):
                     if isinstance(result, dict):
-                        # Successful API call
                         series = result.get("aggregatedTimeSeries")
-                        if series and "value" in series[0]:
-                            data[key] = series[0]["value"]
+                        if series:
+                            if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly
+                                # For hourly, we need the last value in the series for the current hour
+                                data[key] = series[-1].get("value") if series else 0.0
+                            else: # Other aggregated
+                                data[key] = series[0].get("value") if series else 0.0
                         else:
-                            # Successful call, but no data returned. This means 0 energy.
                             data[key] = 0.0
                     elif isinstance(result, Exception):
-                        # Failed API call
-                        _LOGGER.warning(
-                            "Error fetching aggregated data for %s: %s", key, result
-                        )
-                        if key not in data:
-                            data[key] = None  # Set to None on first run if error
+                        _LOGGER.warning("Error fetching aggregated data for %s: %s", key, result)
+                        if key not in data: data[key] = None
                     else:
-                        # Unexpected result type, treat as error
-                        if key not in data:
-                            data[key] = None
-
-
-                # Ensure quarter-hourly keys exist, even if there was no live data
-                if "c_01_quarter_hourly_consumption" not in data:
-                    data["c_01_quarter_hourly_consumption"] = None
-                if "p_01_quarter_hourly_production" not in data:
-                    data["p_01_quarter_hourly_production"] = None
+                        if key not in data: data[key] = None
 
                 return data
         except (asyncio.TimeoutError, Exception) as err:
