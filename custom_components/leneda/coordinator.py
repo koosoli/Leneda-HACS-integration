@@ -46,6 +46,15 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # Define date ranges for aggregated data
                 today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                week_start_dt = today_start_dt - timedelta(days=now.weekday())
+                yesterday_start_dt = today_start_dt - timedelta(days=1)
+                yesterday_end_dt = today_start_dt - timedelta(microseconds=1)
+                last_week_start_dt = week_start_dt - timedelta(weeks=1)
+                last_week_end_dt = week_start_dt - timedelta(microseconds=1)
+                first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                end_of_last_month = first_day_of_current_month - timedelta(microseconds=1)
+                start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
@@ -58,21 +67,59 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
 
                 # Tasks for aggregated data
+                # Tasks for aggregated data
                 aggregated_tasks = [
+                    # Daily
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, today_start_dt, now
+                    ),
+                    # Monthly
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
                     ),
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, month_start_dt, now
                     ),
+                    # Weekly
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, week_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, week_start_dt, now
+                    ),
+                    # Yesterday
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, yesterday_start_dt, yesterday_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, yesterday_start_dt, yesterday_end_dt
+                    ),
+                    # Last Week
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    # Previous Month
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, start_of_last_month, end_of_last_month
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, start_of_last_month, end_of_last_month
+                    ),
                 ]
-                aggregated_keys = ["daily_consumption", "monthly_consumption", "daily_production", "monthly_production"]
+                aggregated_keys = [
+                    "daily_consumption", "daily_production",
+                    "monthly_consumption", "monthly_production",
+                    "weekly_consumption", "weekly_production",
+                    "yesterday_consumption", "yesterday_production",
+                    "last_week_consumption", "last_week_production",
+                    "previous_month_consumption", "previous_month_production",
+                ]
 
                 all_tasks = live_power_tasks + aggregated_tasks
                 results = await asyncio.gather(*all_tasks, return_exceptions=True)
@@ -88,11 +135,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         latest_item = max(result["items"], key=lambda x: x["startedAt"])
                         data[obis_code] = latest_item["value"]
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
-                    else:
-                        if isinstance(result, Exception):
-                            _LOGGER.warning("Error fetching live data for %s: %s.", obis_code, result)
-                        if obis_code not in data: data[obis_code] = None
-                        if f"{obis_code}_data_timestamp" not in data: data[f"{obis_code}_data_timestamp"] = None
+                    elif isinstance(result, Exception):
+                        _LOGGER.warning("Error fetching live data for %s: %s. Keeping last known value.", obis_code, result)
 
                 # Process aggregated results
                 for key, result in zip(aggregated_keys, aggregated_results):
