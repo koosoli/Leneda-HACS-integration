@@ -33,23 +33,23 @@ async def async_setup_entry(
     # Define the order and new names for the energy sensors
     energy_sensors_to_add = [
         # Consumption
-        ("quarter_hourly_consumption", "15-Minute Consumption"),
-        ("hourly_consumption", "Hourly Consumption"),
-        ("daily_consumption", "Current Day Consumption"),
-        ("yesterday_consumption", "Yesterday's Consumption"),
-        ("weekly_consumption", "Current Week Consumption"),
-        ("last_week_consumption", "Last Week's Consumption"),
-        ("monthly_consumption", "Current Month Consumption"),
-        ("previous_month_consumption", "Previous Month's Consumption"),
+        ("c_01_quarter_hourly_consumption", "15-Minute Consumption"),
+        ("c_02_hourly_consumption", "Hourly Consumption"),
+        ("c_03_daily_consumption", "Current Day Consumption"),
+        ("c_04_yesterday_consumption", "Yesterday's Consumption"),
+        ("c_05_weekly_consumption", "Current Week Consumption"),
+        ("c_06_last_week_consumption", "Last Week's Consumption"),
+        ("c_07_monthly_consumption", "Current Month Consumption"),
+        ("c_08_previous_month_consumption", "Previous Month's Consumption"),
         # Production
-        ("quarter_hourly_production", "15-Minute Production"),
-        ("hourly_production", "Hourly Production"),
-        ("daily_production", "Current Day Production"),
-        ("yesterday_production", "Yesterday's Production"),
-        ("weekly_production", "Current Week Production"),
-        ("last_week_production", "Last Week's Production"),
-        ("monthly_production", "Current Month Production"),
-        ("previous_month_production", "Previous Month's Production"),
+        ("p_01_quarter_hourly_production", "15-Minute Production"),
+        ("p_02_hourly_production", "Hourly Production"),
+        ("p_03_daily_production", "Current Day Production"),
+        ("p_04_yesterday_production", "Yesterday's Production"),
+        ("p_05_weekly_production", "Current Week Production"),
+        ("p_06_last_week_production", "Last Week's Production"),
+        ("p_07_monthly_production", "Current Month Production"),
+        ("p_08_previous_month_production", "Previous Month's Production"),
     ]
 
     for sensor_key, name in energy_sensors_to_add:
