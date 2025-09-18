@@ -37,46 +37,86 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from the Leneda API concurrently."""
         _LOGGER.debug("Fetching data from Leneda API")
         now = dt_util.utcnow()
-        # Use a 1-hour window to ensure we get the latest data.
+        # Use a 1-hour window for live data
         start_date = now - timedelta(hours=1)
         end_date = now
 
         try:
             async with async_timeout.timeout(30):
-                tasks = [
+                # Define date ranges for aggregated data
+                today_start_dt = dt_util.start_of_day(now)
+                month_start_dt = dt_util.start_of_day(now.replace(day=1))
+
+                CONSUMPTION_CODE = "1-1:1.29.0"
+                PRODUCTION_CODE = "1-1:2.29.0"
+
+                # Tasks for live power data
+                live_power_tasks = [
                     self.api_client.async_get_metering_data(
                         self.metering_point_id, obis_code, start_date, end_date
-                    )
-                    for obis_code in OBIS_CODES
+                    ) for obis_code in OBIS_CODES
                 ]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Tasks for aggregated data
+                aggregated_tasks = [
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, now
+                    ),
+                ]
+                aggregated_keys = ["daily_consumption", "monthly_consumption", "daily_production", "monthly_production"]
+
+                all_tasks = live_power_tasks + aggregated_tasks
+                results = await asyncio.gather(*all_tasks, return_exceptions=True)
+
+                live_power_results = results[:len(live_power_tasks)]
+                aggregated_results = results[len(live_power_tasks):]
 
                 data = self.data.copy() if self.data else {}
 
-                for obis_code, result in zip(OBIS_CODES.keys(), results):
+                # Process live power results
+                for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
                     if isinstance(result, dict) and result.get("items"):
-                        # We have new data, update the sensor
                         latest_item = max(result["items"], key=lambda x: x["startedAt"])
                         data[obis_code] = latest_item["value"]
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
                     else:
-                        # No new data or an error occurred
                         if isinstance(result, Exception):
-                            _LOGGER.warning(
-                                "Error fetching data for OBIS code %s: %s. Keeping previous value if available.",
-                                obis_code,
-                                result,
-                            )
-                        # For any case without new data, ensure the key exists for the first run.
-                        # If it's not the first run, the old value from self.data is preserved.
-                        if obis_code not in data:
-                            data[obis_code] = None
-                        if f"{obis_code}_data_timestamp" not in data:
-                            data[f"{obis_code}_data_timestamp"] = None
+                            _LOGGER.warning("Error fetching live data for %s: %s.", obis_code, result)
+                        if obis_code not in data: data[obis_code] = None
+                        if f"{obis_code}_data_timestamp" not in data: data[f"{obis_code}_data_timestamp"] = None
+
+                # Process aggregated results
+                for key, result in zip(aggregated_keys, aggregated_results):
+                    if isinstance(result, dict):
+                        # Successful API call
+                        series = result.get("aggregatedTimeSeries")
+                        if series and "value" in series[0]:
+                            data[key] = series[0]["value"]
+                        else:
+                            # Successful call, but no data returned. This means 0 energy.
+                            data[key] = 0.0
+                    elif isinstance(result, Exception):
+                        # Failed API call
+                        _LOGGER.warning(
+                            "Error fetching aggregated data for %s: %s", key, result
+                        )
+                        if key not in data:
+                            data[key] = None  # Set to None on first run if error
+                    else:
+                        # Unexpected result type, treat as error
+                        if key not in data:
+                            data[key] = None
+
                 return data
-        except asyncio.TimeoutError as err:
-            _LOGGER.error("Timeout fetching Leneda data: %s", err)
-            raise UpdateFailed(f"Timeout communicating with API: {err}") from err
-        except Exception as err:
+        except (asyncio.TimeoutError, Exception) as err:
             _LOGGER.error("Error fetching Leneda data: %s", err)
             raise UpdateFailed(f"Error communicating with API: {err}") from err
