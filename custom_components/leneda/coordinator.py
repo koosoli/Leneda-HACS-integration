@@ -44,8 +44,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             async with async_timeout.timeout(30):
                 # Define date ranges for aggregated data
-                today_start_dt = dt_util.start_of_day(now)
-                month_start_dt = dt_util.start_of_day(now.replace(day=1))
+                today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
