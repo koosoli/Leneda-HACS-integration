@@ -53,9 +53,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             async with async_timeout.timeout(30):
-                # Define date ranges
+                # Define date ranges - Account for Leneda processing delays
                 today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                live_data_start_dt = now - timedelta(minutes=60) # Fetch last 60 mins for live data
+                live_data_start_dt = now - timedelta(hours=2) # Use 2 hours to account for processing delay
                 month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 week_start_dt = today_start_dt - timedelta(days=now.weekday())
                 yesterday_start_dt = today_start_dt - timedelta(days=1)
@@ -65,6 +65,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 end_of_last_month = first_day_of_current_month - timedelta(microseconds=1)
                 start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                
+                # Use more reasonable time ranges for recent data (account for processing delays)
+                quarter_hour_end_dt = now - timedelta(minutes=30)  # Look 30 mins back to account for delays
+                quarter_hour_start_dt = quarter_hour_end_dt - timedelta(minutes=15)
+                current_hour_start_dt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)  # Previous complete hour
+                current_hour_end_dt = current_hour_start_dt + timedelta(hours=1)
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
@@ -77,29 +83,28 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ) for obis_code in OBIS_CODES
                 ]
 
-                # Tasks for 15-minute raw data (for energy calculation)
+                # Tasks for 15-minute raw data (for energy calculation) - Use completed intervals
                 _LOGGER.debug("Setting up tasks for 15-minute raw data...")
-                quarter_hour_start_dt = now - timedelta(minutes=15)
                 quarter_hour_tasks = [
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, quarter_hour_start_dt, now
+                        self.metering_point_id, CONSUMPTION_CODE, quarter_hour_start_dt, quarter_hour_end_dt
                     ),
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, quarter_hour_start_dt, now
+                        self.metering_point_id, PRODUCTION_CODE, quarter_hour_start_dt, quarter_hour_end_dt
                     ),
                 ]
 
                 # Tasks for aggregated data
                 _LOGGER.debug("Setting up tasks for aggregated data...")
                 aggregated_tasks = [
-                    # Hourly (Current hour)
+                    # Hourly (Previous complete hour)
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now, aggregation_level="Hour"
+                        self.metering_point_id, CONSUMPTION_CODE, current_hour_start_dt, current_hour_end_dt, aggregation_level="Hour"
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now, aggregation_level="Hour"
+                        self.metering_point_id, PRODUCTION_CODE, current_hour_start_dt, current_hour_end_dt, aggregation_level="Hour"
                     ),
-                    # Daily
+                    # Daily (Current day consumption so far)
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
                     ),
@@ -210,7 +215,15 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         if obis_code not in data:
                             data[obis_code] = None
                     else:
-                        _LOGGER.warning("No items found for live data obis_code %s. Response: %s", obis_code, result)
+                        # Handle empty responses (null meteringPointCode or empty items) more quietly
+                        if isinstance(result, dict):
+                            # Check if this is a null response (API returned None values)
+                            if result.get("meteringPointCode") is None or result.get("obisCode") is None:
+                                _LOGGER.debug("API returned null response for obis_code %s (likely not supported by meter)", obis_code)
+                            else:
+                                _LOGGER.debug("No items found for live data obis_code %s (no recent data available)", obis_code)
+                        else:
+                            _LOGGER.warning("Unexpected response type for live data obis_code %s: %s", obis_code, result)
                         # Keep existing value if available for empty responses
                         if obis_code not in data:
                             data[obis_code] = None
@@ -229,17 +242,23 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         # Network errors: preserve previous values
                         _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
                         if key not in data:
-                            data[key] = None
+                            data[key] = 0.0
                     elif isinstance(result, Exception):
                         _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
                         # Keep previous value if available, don't reset to 0
                         if key not in data:
-                            data[key] = None
+                            data[key] = 0.0
                     else:
-                        _LOGGER.warning("No items found for 15-minute data %s. Response: %s", key, result)
-                        # Keep previous value if available, don't reset to 0
-                        if key not in data:
-                            data[key] = None
+                        # Handle empty responses more quietly - this is common for recent time periods
+                        if isinstance(result, dict):
+                            if result.get("meteringPointCode") is None:
+                                _LOGGER.debug("API returned null response for 15-minute data %s (meter may not support this OBIS code)", key)
+                            else:
+                                _LOGGER.debug("No items found for 15-minute data %s (processing delay - trying older time range)", key)
+                        else:
+                            _LOGGER.warning("Unexpected response type for 15-minute data %s: %s", key, result)
+                        # Set to 0.0 for energy sensors when no data available
+                        data[key] = 0.0
 
 
                 _LOGGER.debug("Processing aggregated results...")
@@ -269,12 +288,16 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
                         # Keep previous value if available
                         if key not in data: 
-                            data[key] = None
+                            data[key] = 0.0
                     else:
-                        _LOGGER.warning("Unexpected result type for aggregated data %s. Response: %s", key, result)
+                        # Handle unexpected aggregated results more gracefully
+                        if isinstance(result, dict) and result.get("unit") is None:
+                            _LOGGER.debug("API returned null unit for aggregated data %s (likely no data for time period)", key)
+                        else:
+                            _LOGGER.warning("Unexpected result type for aggregated data %s: %s", key, result)
                         # Keep previous value if available
                         if key not in data: 
-                            data[key] = None
+                            data[key] = 0.0
 
                 _LOGGER.debug("--- Leneda Data Update Finished ---")
                 _LOGGER.debug("Final coordinated data: %s", data)
