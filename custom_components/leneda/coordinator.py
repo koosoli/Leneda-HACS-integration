@@ -167,9 +167,26 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 data = self.data.copy() if self.data else {}
 
-                # Ensure keys exist before processing, setting a default
-                data.setdefault("c_01_quarter_hourly_consumption", 0.0)
-                data.setdefault("p_01_quarter_hourly_production", 0.0)
+                # Initialize all sensor keys with 0.0 if not present (first run)
+                # This prevents "Unknown" state on startup
+                sensor_keys = [
+                    "c_01_quarter_hourly_consumption", "p_01_quarter_hourly_production",
+                    "c_02_hourly_consumption", "p_02_hourly_production",
+                    "c_03_daily_consumption", "p_03_daily_production",
+                    "c_04_yesterday_consumption", "p_04_yesterday_production",
+                    "c_05_weekly_consumption", "p_05_weekly_production",
+                    "c_06_last_week_consumption", "p_06_last_week_production",
+                    "c_07_monthly_consumption", "p_07_monthly_production",
+                    "c_08_previous_month_consumption", "p_08_previous_month_production",
+                ]
+                
+                # Set default values only on first run to avoid "Unknown" states
+                for key in sensor_keys:
+                    data.setdefault(key, 0.0)
+                
+                # Initialize OBIS code sensors too
+                for obis_code in OBIS_CODES.keys():
+                    data.setdefault(obis_code, None)  # None is OK for these as they show real-time data
 
                 _LOGGER.debug("Processing live power results...")
                 # Process live power results
@@ -239,10 +256,10 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                                 data[key] = series[0].get("value", 0.0) if series else 0.0
                                 _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
                         else:
-                            # Keep previous value if available instead of setting to 0
-                            if key not in data:
-                                data[key] = None
-                            _LOGGER.debug(f"No aggregated time series for {key}, keeping previous value or setting to None")
+                            # Keep previous value if available, otherwise set to 0.0 for energy sensors
+                            if key not in data or data[key] is None:
+                                data[key] = 0.0
+                            _LOGGER.debug(f"No aggregated time series for {key}, keeping previous value: {data[key]}")
                     elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
                         # Network errors: preserve previous values
                         _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
