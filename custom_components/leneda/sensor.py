@@ -26,7 +26,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES
+from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES, GAS_OBIS_CODES
 from .coordinator import LenedaDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -115,28 +115,28 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_unique_id = f"{metering_point_id}_{obis_code}_v2"
         self._attr_native_unit_of_measurement = details["unit"]
 
-        # Set device class and state class based on unit of measurement
-        if details["unit"] == "kW":
+        # Set device class, state class, and icon based on OBIS code and unit
+        if self._obis_code in GAS_OBIS_CODES:
+            # This is a gas sensor, use gas icon and device class
+            self._attr_device_class = SensorDeviceClass.GAS
+            self._attr_icon = "mdi:gas-cylinder"
+            # Gas consumption is always increasing
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif details["unit"] == "kW":
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_icon = "mdi:flash"
         elif details["unit"] == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_icon = "mdi:flash"
         elif details["unit"] == "kVAR":
             self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        elif details["unit"] in ("m³", "Nm³"):
-            # Gas volume sensors - use GAS device class for proper display
-            self._attr_device_class = SensorDeviceClass.GAS
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            # Ensure proper icon for gas sensors
-            self._attr_icon = "mdi:gas-cylinder"
+            self._attr_icon = "mdi:flash"
         else:
-            # Fallback for unknown units
+            # Fallback for other units
             self._attr_state_class = SensorStateClass.MEASUREMENT
-
-        # Set icon if not already set (gas sensors have their own icon)
-        if not hasattr(self, '_attr_icon') or self._attr_icon is None:
             self._attr_icon = "mdi:flash"
         
         # Extract base metering point ID for device consolidation
