@@ -1,10 +1,23 @@
-"""DataUpdateCoordinator for the Leneda integration."""
+"""DataUpdateCoordinator for the Leneda integration.
+
+This module contains the coordinator that handles data fetching from the Leneda API.
+It manages three types of data:
+1. Live power data (kW) - Current power consumption/production
+2. 15-minute interval data - For calculating recent energy consumption
+3. Aggregated data - Historical consumption/production over various periods
+
+The coordinator implements intelligent error handling:
+- Network timeouts preserve previous values instead of showing zero
+- Missing data is handled gracefully without marking sensors as unavailable
+- Gas sensors are properly identified and prefixed
+"""
 from __future__ import annotations
 
 import asyncio
 import async_timeout
 from datetime import timedelta
 import logging
+import aiohttp
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
@@ -168,10 +181,22 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         data[obis_code] = value
                         data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
                         _LOGGER.debug(f"Latest item for {obis_code}: {latest_item}")
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        # Network errors: preserve previous values
+                        _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
+                        # Keep existing value if available
+                        if obis_code not in data:
+                            data[obis_code] = None
                     elif isinstance(result, Exception):
                         _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
+                        # Keep existing value if available
+                        if obis_code not in data:
+                            data[obis_code] = None
                     else:
                         _LOGGER.warning("No items found for live data obis_code %s. Response: %s", obis_code, result)
+                        # Keep existing value if available for empty responses
+                        if obis_code not in data:
+                            data[obis_code] = None
 
                 _LOGGER.debug("Processing 15-minute results...")
                 # Process 15-minute results for energy calculation (kW * 0.25h = kWh)
@@ -183,12 +208,21 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         total_kwh = sum(item["value"] * 0.25 for item in result["items"])
                         data[key] = total_kwh
                         _LOGGER.debug(f"15-minute energy for {key}: {total_kwh} kWh")
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        # Network errors: preserve previous values
+                        _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
+                        if key not in data:
+                            data[key] = None
                     elif isinstance(result, Exception):
                         _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
-                        data[key] = 0.0
+                        # Keep previous value if available, don't reset to 0
+                        if key not in data:
+                            data[key] = None
                     else:
                         _LOGGER.warning("No items found for 15-minute data %s. Response: %s", key, result)
-                        data[key] = 0.0
+                        # Keep previous value if available, don't reset to 0
+                        if key not in data:
+                            data[key] = None
 
 
                 _LOGGER.debug("Processing aggregated results...")
@@ -197,22 +231,33 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     if isinstance(result, dict):
                         _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
-                        if series:
-                            if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly
-                                data[key] = series[-1].get("value") if series else 0.0
+                        if series and len(series) > 0:
+                            if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly - get latest hour
+                                data[key] = series[-1].get("value", 0.0) if series else 0.0
                                 _LOGGER.debug(f"Processed hourly data for {key}: {data[key]}")
-                            else: # Other aggregated
-                                data[key] = series[0].get("value") if series else 0.0
+                            else: # Other aggregated - get first (and usually only) value
+                                data[key] = series[0].get("value", 0.0) if series else 0.0
                                 _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
                         else:
-                            data[key] = 0.0
-                            _LOGGER.debug(f"No aggregated time series for {key}, setting value to 0.0")
+                            # Keep previous value if available instead of setting to 0
+                            if key not in data:
+                                data[key] = None
+                            _LOGGER.debug(f"No aggregated time series for {key}, keeping previous value or setting to None")
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        # Network errors: preserve previous values
+                        _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
+                        if key not in data: 
+                            data[key] = None
                     elif isinstance(result, Exception):
                         _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
-                        if key not in data: data[key] = None
+                        # Keep previous value if available
+                        if key not in data: 
+                            data[key] = None
                     else:
                         _LOGGER.warning("Unexpected result type for aggregated data %s. Response: %s", key, result)
-                        if key not in data: data[key] = None
+                        # Keep previous value if available
+                        if key not in data: 
+                            data[key] = None
 
                 _LOGGER.debug("--- Leneda Data Update Finished ---")
                 _LOGGER.debug("Final coordinated data: %s", data)

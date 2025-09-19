@@ -1,4 +1,18 @@
-"""API client for the Leneda API."""
+"""API client for the Leneda energy data platform.
+
+This module provides a client interface to interact with the Leneda REST API
+for retrieving energy consumption and production data from Luxembourg's smart meters.
+
+The API supports:
+- Real-time metering data (15-minute intervals)
+- Aggregated data over various time periods (hourly, daily, weekly, monthly)
+- Multiple OBIS codes for different types of measurements
+- Production sharing data for energy communities
+- Gas consumption data (volume and energy)
+
+Authentication is handled via API key and Energy ID headers.
+Network errors and timeouts are properly handled to maintain data integrity.
+"""
 import asyncio
 from datetime import datetime, timedelta
 import logging
@@ -9,12 +23,15 @@ _LOGGER = logging.getLogger(__name__)
 
 class LenedaApiError(HomeAssistantError):
     """Base exception for Leneda API errors."""
+    pass
 
 class InvalidAuth(LenedaApiError):
     """Exception to indicate invalid authentication."""
+    pass
 
 class NoDataError(LenedaApiError):
-    """Exception to indicate no data found."""
+    """Exception to indicate no data found.""" 
+    pass
 
 from homeassistant.util import dt as dt_util
 
@@ -37,7 +54,25 @@ class LenedaApiClient:
         start_date: datetime,
         end_date: datetime,
     ) -> dict:
-        """Fetch metering data from the Leneda API."""
+        """Fetch raw metering data from the Leneda API.
+        
+        Retrieves time-series data for a specific metering point and OBIS code
+        within the specified time range. Data is typically provided in 15-minute intervals.
+        
+        Args:
+            metering_point_id: The metering point identifier (LU + 34 characters)
+            obis_code: The OBIS code specifying the measurement type
+            start_date: Start of the time range (UTC)
+            end_date: End of the time range (UTC)
+            
+        Returns:
+            Dict containing metering data with 'items' list of measurements,
+            each having 'value', 'startedAt', 'type', 'version', 'calculated'
+            
+        Raises:
+            aiohttp.ClientResponseError: For HTTP errors (401, 403, etc.)
+            aiohttp.ClientError: For network connectivity issues
+        """
         headers = {"X-API-KEY": self._api_key, "X-ENERGY-ID": self._energy_id}
         params = {
             "startDateTime": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -61,7 +96,22 @@ class LenedaApiClient:
         end_date: datetime,
         aggregation_level: str = "Infinite",
     ) -> dict:
-        """Fetch aggregated metering data from the Leneda API."""
+        """Fetch aggregated metering data from the Leneda API.
+        
+        Retrieves pre-aggregated consumption/production data over specified periods.
+        For kW measurements, values are automatically summed and converted to kWh.
+        
+        Args:
+            metering_point_id: The metering point identifier
+            obis_code: The OBIS code for the measurement type
+            start_date: Start of the date range
+            end_date: End of the date range  
+            aggregation_level: "Hour", "Day", "Week", "Month", or "Infinite"
+            
+        Returns:
+            Dict with 'aggregatedTimeSeries' containing aggregated values
+            and 'unit' showing the measurement unit (typically kWh)
+        """
         headers = {"X-API-KEY": self._api_key, "X-ENERGY-ID": self._energy_id}
         params = {
             "startDate": start_date.strftime("%Y-%m-%d"),

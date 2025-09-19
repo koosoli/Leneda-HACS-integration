@@ -1,4 +1,17 @@
-"""Sensor platform for Leneda."""
+"""Sensor platform for Leneda energy meters.
+
+This module creates sensors for the Leneda integration that display:
+1. Live power consumption/production data (kW/kVAR)
+2. Energy consumption/production over various time periods (kWh) 
+3. Gas consumption data (m³, Nm³, kWh) with GAS prefix
+4. Production sharing data for energy communities
+
+Sensors are intelligently ordered by number and properly handle:
+- Missing data without showing as "Unavailable"
+- Gas sensors with proper GAS prefix identification  
+- Previous value retention when API calls fail
+- Proper unit assignments and device classes
+"""
 from __future__ import annotations
 import logging
 
@@ -42,9 +55,9 @@ async def async_setup_entry(
         ("c_08_previous_month_consumption", "08 - Previous Month's Consumption", "energy"),
         ("1-1:1.29.0", "09 - Measured Active Consumption", "obis"),
         ("1-1:3.29.0", "10 - Measured Reactive Consumption", "obis"),
-        ("7-20:99.33.17", "11 - Measured Consumed Energy", "obis"),
-        ("7-1:99.23.15", "12 - Measured Consumed Volume", "obis"),
-        ("7-1:99.23.17", "13 - Measured Consumed Standard Volume", "obis"),
+        ("7-20:99.33.17", "11 - GAS - Measured Consumed Energy", "obis"),
+        ("7-1:99.23.15", "12 - GAS - Measured Consumed Volume", "obis"),
+        ("7-1:99.23.17", "13 - GAS - Measured Consumed Standard Volume", "obis"),
         ("1-65:1.29.1", "14 - Consumption Covered by Production (Layer 1)", "obis"),
         ("1-65:1.29.3", "15 - Consumption Covered by Production (Layer 2)", "obis"),
         ("1-65:1.29.2", "16 - Consumption Covered by Production (Layer 3)", "obis"),
@@ -108,6 +121,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_unique_id = f"{metering_point_id}_{obis_code}_v2"
         self._attr_native_unit_of_measurement = details["unit"]
 
+        # Set device class and state class based on unit of measurement
         if details["unit"] == "kW":
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -118,10 +132,18 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif details["unit"] in ("m³", "Nm³"):
+            # Gas volume sensors - use GAS device class for proper display
             self._attr_device_class = SensorDeviceClass.GAS
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            # Ensure proper icon for gas sensors
+            self._attr_icon = "mdi:gas-cylinder"
+        else:
+            # Fallback for unknown units
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
-        self._attr_icon = "mdi:flash"
+        # Set icon if not already set (gas sensors have their own icon)
+        if not hasattr(self, '_attr_icon') or self._attr_icon is None:
+            self._attr_icon = "mdi:flash"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, metering_point_id)},
             name=f"Leneda (...{metering_point_id[-4:]})",
@@ -140,11 +162,9 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            super().available
-            and self.coordinator.data is not None
-            and self.coordinator.data.get(self._obis_code) is not None
-        )
+        # Always show as available if coordinator is working, even if no data
+        # This prevents sensors from showing as "Unavailable" when they just have no data
+        return super().available and self.coordinator.data is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, str] | None:
@@ -196,8 +216,6 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return (
-            super().available
-            and self.coordinator.data is not None
-            and self.coordinator.data.get(self._key) is not None
-        )
+        # Always show as available if coordinator is working, even if no data
+        # This prevents sensors from showing as "Unavailable" when they just have no data
+        return super().available and self.coordinator.data is not None
