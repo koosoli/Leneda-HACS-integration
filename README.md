@@ -1,501 +1,237 @@
 # Leneda Home Assistant Integration
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/koosoli/Leneda-HACS-integration)](https://github.com/koosoli/Leneda-HACS-integration/releases)
-[![GitHub](https://img.shields.io/github/license/koosoli/Leneda-HACS-integration)](https://github.com/koosoli/Leneda-HACS-integration/blob/main/LICENSE)
+![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg)  
 
-A comprehensive Home Assistant integration for [Leneda](https://leneda.eu) smart energy meters in Luxembourg. Monitor your electricity and gas consumption, production, and energy community sharing data with daily updates.
+
+A comprehensive Home Assistant integration for **Leneda smart energy meters in Luxembourg**.  
+Monitor your **electricity and gas consumption and production** with daily updates based on data from the previous day.
+
+---
 
 ## 🚀 Features
 
-### ⚡ **Smart Energy Monitoring**
-- **Historical Analytics**: Daily, weekly, and monthly energy statistics from previous day onwards
-- **Gas Metering**: Support for gas volume (m³, Nm³) and energy (kWh) measurements  
-- **Energy Communities**: Track production sharing across multiple layers (AIR, ACR/ACF/AC1, CEL, APS/CER/CEN)
-- **Comprehensive Data**: Access to all available OBIS codes for detailed energy analysis
+### ⚡ Smart Energy Monitoring
+- **Historical Analytics**: Provides daily, weekly, and monthly energy statistics based on complete data from the previous day.
+- **Gas Metering**: Support for gas volume (m³, Nm³) and energy (kWh) measurements.
+- **Energy Communities**: Track production sharing across all community layers (if you are part of one).
+- **Built-in Calculations**: Automatically calculates key metrics like exported and self-consumed solar energy for yesterday, the last week, and the last month. *No complex templates needed!*
 
-### 🔄 **Device Consolidation** 
-- **Unified Meters**: Automatically merges production and consumption data from the same physical meter
-- **Smart Grouping**: Groups sensors by base meter ID to avoid duplicate devices
-- **Zero-Value Protection**: Preserves previous values when API calls fail instead of showing zero
+### 🔄 Robust and Reliable
+- **Device Consolidation**: Intelligently groups multiple metering points (e.g., consumption and production) into a single logical device in Home Assistant.
+- **Resilient**: Handles network issues and temporary API outages gracefully, preserving the last known sensor state.
 
-### 🛡️ **Robust Error Handling**
-- **Network Resilience**: Handles DNS timeouts and connectivity issues gracefully
-- **Data Integrity**: Maintains sensor availability even when temporary data is missing
-- **Intelligent Fallbacks**: Keeps previous values during network outages
+### 📊 Comprehensive Sensors
+- **Complete Coverage**: Provides a full suite of sensors for all available historical data points, including consumption, production, gas, grid import/export, and energy sharing.
 
-### 📊 **Comprehensive Sensors** (27 total)
-
-#### **Energy Consumption & Production**
-- Historical data: Yesterday, weekly, monthly aggregations
-- Power measurements via OBIS codes (when available from meter)
-- Complete coverage of available Leneda data points
-
-#### **Gas Sensors** (with GAS prefix)
-- **GAS - Measured Consumed Volume** (m³)
-- **GAS - Measured Consumed Standard Volume** (Nm³)  
-- **GAS - Measured Consumed Energy** (kWh)
-
-#### **Energy Community Sharing**
-- Production sharing across 4 community layers
-- Consumption covered by shared production
-- Remaining consumption/production after sharing
+---
 
 ## 📦 Installation
 
-### Method 1: HACS (Recommended)
-
-1. Open HACS in Home Assistant
-2. Go to **Integrations** 
-3. Click the **⋮** menu → **Custom repositories**
-4. Add repository URL: `https://github.com/koosoli/Leneda-HACS-integration`
+### HACS (Recommended)
+1. Open **HACS** in Home Assistant.
+2. Go to **Integrations**.
+3. Click the **⋮ menu → Custom repositories**.
+4. Add repository URL:  
+   `https://github.com/koosoli/Leneda-HACS-integration`
 5. Category: **Integration**
-6. Click **Add** → **Install**
-7. **Restart** Home Assistant
+6. Click **Add**, find the "Leneda" integration in the list, and click **Install**.
+7. Restart Home Assistant.
 
-### Method 2: Manual Installation
+### Manual Installation
+1. Download the latest release from GitHub.
+2. Extract the **leneda** folder into your `config/custom_components/` directory.
+3. Restart Home Assistant.
 
-1. Download the latest release from [GitHub](https://github.com/koosoli/Leneda-HACS-integration/releases)
-2. Extract to `config/custom_components/leneda/`
-3. Restart Home Assistant
+---
 
 ## ⚙️ Configuration
 
 ### Step 1: Get Leneda API Credentials
+1. Log in to the **Leneda Portal**.
+2. Navigate to the **API Keys** section and generate a new key.
+3. Note your **API Key**, **Energy ID**, and **Metering Point ID(s)**.
 
-1. Visit [Leneda Portal](https://portal.leneda.eu)
-2. Log in to your account
-3. Navigate to **API Keys** section
-4. Generate a new API key
-5. Note your **Energy ID** and **Metering Point ID**
+📚 *Detailed API key tutorial available in the portal.*
 
-📚 [Detailed API key tutorial](https://leneda.eu/en/docs/how-to-generate-and-manage-api-keys.html)
+### Step 2: Add Integration to Home Assistant
+1. Go to **Settings → Devices & Services**.
+2. Click **+ Add Integration** and search for **"Leneda"**.
+3. Enter your credentials when prompted.  
+   The integration will automatically create devices and sensors.
 
-### Step 2: Add Integration
-
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for **"Leneda"**
-4. Enter your credentials:
-   - **API Key**: Your generated API key
-   - **Energy ID**: Your Leneda Energy ID (format: LUXE-xx-yy-zzzz)
-   - **Metering Point ID**: Your meter ID (format: LU + 34 characters)
-
-### Step 3: Verify Setup
-
-The integration will automatically create:
-- ✅ One device per physical meter (consolidated)
-- ✅ 35 sensors with proper numbering and GAS prefixes
-- ✅ Proper device classes for energy, power, and gas sensors
+---
 
 ## 🏠 Usage Examples
 
-### Energy Dashboard Integration
+### Configuring the Energy Dashboard
+The Leneda API provides **daily totals from the previous day**.  
+To use this data effectively in Home Assistant's **Energy Dashboard**, you need to use the `utility_meter` helper.
 
-Add Leneda sensors to your Home Assistant Energy Dashboard:
+Create Utility Meter Helpers by adding the following to your `configuration.yaml`  
+*(replace `...XXXX...` with your meter ID)*:
 
-```yaml
+````yaml
 # configuration.yaml
-energy:
-  sources:
-    - stat: sensor.leneda_03_current_day_consumption
-      name: "Daily Consumption"
-    - stat: sensor.leneda_21_current_day_production
-      name: "Solar Production"
-```
+utility_meter:
+  daily_grid_import:
+    source: sensor.leneda_...XXXX..._remaining_consumption_after_sharing
+    cycle: daily
+  daily_grid_export:
+    source: sensor.leneda_...XXXX..._remaining_production_after_sharing
+    cycle: daily
+  daily_solar_production:
+    source: sensor.leneda_...XXXX..._measured_active_production
+    cycle: daily
+````
 
-### Automations
+Restart Home Assistant after adding the helpers.
 
-Create smart automations based on energy data:
+Configure the Energy Dashboard:  
+**Settings → Dashboards → Energy**
 
-```yaml
-# Notify when high consumption detected
-automation:
-  - alias: "High Energy Consumption Alert"
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.leneda_02_hourly_consumption
-        above: 5.0
-    action:
-      - service: notify.mobile_app
-        data:
-          message: "High energy consumption: {{ states('sensor.leneda_02_hourly_consumption') }} kWh"
-```
+- **Electricity Grid**:
+  - Grid consumption: `sensor.daily_grid_import`
+  - Return to grid: `sensor.daily_grid_export`
+- **Solar Panels**:
+  - Solar production: `sensor.daily_solar_production`
 
-### Lovelace Dashboard
+---
 
-```yaml
-# Dashboard card example
-type: entities
-title: "Energy Overview"
-entities:
-  - sensor.leneda_03_current_day_consumption
-  - sensor.leneda_21_current_day_production
-  - sensor.leneda_09_measured_active_consumption
-  - sensor.leneda_27_measured_active_production
-  - sensor.leneda_11_gas_measured_consumed_energy
-```
+### Energy Billing & Auto-Consumption Calculations
 
-## � Energy Billing & Auto-Consumption Calculations
+> **Note:** The integration now provides built-in sensors for exported and self-consumed energy.  
+> The template examples below are for advanced/custom calculations.
 
-### Understanding Your Energy Flow
+**Key Built-in Sensors:**
+- `sensor.leneda_..._yesterdays_self_consumed_energy`
+- `sensor.leneda_..._yesterdays_exported_energy`
+- `sensor.leneda_..._last_weeks_self_consumed_energy`
+- and more!
 
-With solar panels and smart meters, understanding your energy billing involves tracking multiple energy flows. Here's how to calculate key metrics using Leneda sensors:
+#### Advanced Calculations (Template Examples)
 
-#### **Meter Setup Types**
+If you have a separate meter for your solar inverter's own consumption, you can create more detailed template sensors.  
+*(replace `...HOUSE...` and `...INVERTER...` with the appropriate meter IDs)*
 
-**Single Meter (Net Metering)**
-- House consumption meter shows net import/export
-- Solar production tracked separately
-- Auto-consumption calculated from difference
-
-**Multiple Meters (Separate Metering)**  
-- House consumption: `LU...070056600` (example)
-- Solar inverter consumption: `LU...070590176` 
-- Solar production: `LU...770590176`
-- More precise tracking of energy flows
-
-### 📊 **Key Calculations**
-
-#### **Solar Auto-Consumption**
-```
-Net Solar Production = Solar Production - Inverter Consumption
-Auto-Consumed Solar = Net Solar Production - Grid Export
-```
-
-**Using Leneda Sensors:**
-```yaml
-# If you have grid export data (sensor 33)
-template:
-  - sensor:
-      name: "Solar Auto-Consumption Today"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set production = states('sensor.leneda_21_current_day_production') | float %}
-        {% set inverter = states('sensor.leneda_03_current_day_consumption') | float %}
-        {% set export = states('sensor.leneda_33_remaining_production_after_sharing') | float %}
-        {% set net_production = production - inverter %}
-        {{ (net_production - export) | round(2) }}
-
-  - sensor:
-      name: "Net Solar Production Today"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set production = states('sensor.leneda_21_current_day_production') | float %}
-        {% set inverter = states('sensor.leneda_03_current_day_consumption') | float %}
-        {{ (production - inverter) | round(2) }}
-```
-
-#### **Self-Sufficiency Percentage**
-```
-Self-Sufficiency = (Auto-Consumed Solar / Total House Consumption) × 100%
-```
-
-**Template Sensor:**
-```yaml
-template:
-  - sensor:
-      name: "Self Sufficiency Today"
-      unit_of_measurement: "%"
-      state: >
-        {% set consumption = states('sensor.leneda_03_current_day_consumption') | float %}
-        {% set production = states('sensor.leneda_21_current_day_production') | float %}
-        {% set auto_consumed = min(consumption, production) %}
-        {% if consumption > 0 %}
-          {{ ((auto_consumed / consumption) * 100) | round(1) }}
-        {% else %}
-          0
-        {% endif %}
-```
-
-#### **Grid Import/Export Balance**
-```
-Total Consumption = House Consumption + Inverter Consumption  
-Net Solar Available = Solar Production - Inverter Consumption
-Grid Import = max(0, Total Consumption - Net Solar Available)
-Grid Export = max(0, Net Solar Available - House Consumption)
-```
-
-**Template Sensors:**
-```yaml
-template:
-  - sensor:
-      # Total consumption you pay for (including inverter)
-      name: "Total Energy Consumption Today"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
-        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {{ (house + inverter) | round(2) }}
-
-  - sensor:
-      # Grid Import (what you pay for) - Simple method to avoid double-counting
-      name: "Grid Import Today"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
-        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {% set production = states('sensor.leneda_0176_21_current_day_production') | float %}
-        {# Total consumption minus solar production that can offset it #}
-        {{ max(0, (house + inverter) - production) | round(2) }}
-
-  - sensor:
-      # Grid Export (what you get paid for)  
-      name: "Grid Export Today"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
-        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {% set production = states('sensor.leneda_0176_21_current_day_production') | float %}
-        {% set net_solar = production - inverter %}
-        {{ max(0, net_solar - house) | round(2) }}
-```
-
-#### **Energy Cost Calculation**
-```yaml
-template:
-  - sensor:
-      name: "Daily Energy Cost"
-      unit_of_measurement: "€"
-      state: >
-        {% set import_kwh = states('sensor.grid_import_today') | float %}
-        {% set export_kwh = states('sensor.grid_export_today') | float %}
-        {% set import_rate = 0.30 %}  # €/kWh - adjust to your rate
-        {% set export_rate = 0.05 %}  # €/kWh - adjust to your feed-in tariff
-        {{ ((import_kwh * import_rate) - (export_kwh * export_rate)) | round(2) }}
-```
-
-### 🏠 **Multiple Meter Scenarios**
-
-#### **Main Solar + Balkonkraftwerk Setup**
-
-If you have both main solar panels and a Balkonkraftwerk (plug-in solar):
-
-```yaml
-template:
-  - sensor:
-      name: "Total Energy Cost Today"
-      unit_of_measurement: "€"
-      state: >
-        {% set house_net = states('sensor.leneda_6600_03_current_day_consumption') | float %}
-        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {% set main_solar = states('sensor.leneda_0176_21_current_day_production') | float %}
-        {% set main_export = states('sensor.leneda_0176_33_remaining_production_after_sharing') | float(0) %}
-        {% set import_rate = 0.30 %}  # €/kWh
-        {% set export_rate = 0.05 %}  # €/kWh
-        
-        {# Total consumption you pay for (house + inverter) #}
-        {% set total_consumption = house_net + inverter %}
-        {# Net solar available after inverter consumption #}
-        {% set net_solar = main_solar - inverter %}
-        {# Auto-consumed solar (reduces grid import) #}
-        {% set auto_consumed = min(house_net, net_solar) %}
-        {# Grid import cost #}
-        {% set grid_import = max(0, total_consumption - net_solar) %}
-        {# Grid export revenue #}
-        {% set grid_export = max(0, net_solar - house_net) %}
-        
-        {{ ((grid_import * import_rate) - (grid_export * export_rate)) | round(2) }}
-
-  - sensor:
-      name: "Total Solar Auto-Consumption"
-      unit_of_measurement: "kWh"
-      state: >
-        {% set house_net = states('sensor.leneda_6600_03_current_day_consumption') | float %}
-        {% set main_solar = states('sensor.leneda_0176_21_current_day_production') | float %}
-        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {% set main_export = states('sensor.leneda_0176_33_remaining_production_after_sharing') | float(0) %}
-        
-        {# Net solar available (after inverter consumption) #}
-        {% set net_solar = main_solar - inverter %}
-        {# Main solar auto-consumption (excludes Balkonkraftwerk which is already in house meter) #}
-        {% set main_auto = min(house_net, net_solar) %}
-        
-        {{ main_auto | round(2) }}
-```
-
-#### **Inverter Efficiency Tracking**
-
-```yaml
-template:
-  - sensor:
-      name: "Solar System Efficiency"
-      unit_of_measurement: "%"
-      state: >
-        {% set production = states('sensor.leneda_0176_21_current_day_production') | float %}
-        {% set inverter_consumption = states('sensor.leneda_0176_03_current_day_consumption') | float %}
-        {% if production > 0 %}
-          {{ (((production - inverter_consumption) / production) * 100) | round(1) }}
-        {% else %}
-          100
-        {% endif %}
-```
-
-### 📈 **Energy Dashboard Integration**
-
-Add calculated sensors to Home Assistant's Energy Dashboard:
-
-```yaml
+````yaml
 # configuration.yaml
-energy:
-  sources:
-    # Grid Import (what you pay for)
-    - stat: sensor.grid_import_today
-      name: "Grid Import"
-    # Solar Production  
-    - stat: sensor.leneda_21_current_day_production
-      name: "Solar Production"
-  grid_consumption:
-    # Net house consumption
-    - stat: sensor.leneda_03_current_day_consumption
-      name: "House Consumption"
-  solar:
-    # Solar panels
-    - stat: sensor.leneda_21_current_day_production
-      name: "Solar Panels"
-```
-
-### 💡 **Advanced Analytics**
-
-#### **Monthly Energy Summary**
-```yaml
 template:
   - sensor:
-      name: "Monthly Energy Summary"
-      state: "OK"
-      attributes:
-        house_consumption: "{{ states('sensor.leneda_07_current_month_consumption') }}"
-        solar_production: "{{ states('sensor.leneda_25_current_month_production') }}"
-        self_sufficiency: >
-          {% set consumption = states('sensor.leneda_07_current_month_consumption') | float %}
-          {% set production = states('sensor.leneda_25_current_month_production') | float %}
-          {% if consumption > 0 %}
-            {{ ((min(consumption, production) / consumption) * 100) | round(1) }}%
-          {% else %}
-            0%
-          {% endif %}
-        estimated_savings: >
-          {% set production = states('sensor.leneda_25_current_month_production') | float %}
-          {% set rate = 0.30 %}
-          {{ (production * rate) | round(2) }}€
-```
+      # Total consumption you pay for (House + Inverter)
+      - name: "Total Energy Consumption Yesterday"
+        unique_id: total_energy_consumption_yesterday
+        unit_of_measurement: "kWh"
+        state: >
+          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
+          {% set inverter = states('sensor.leneda_...INVERTER..._yesterdays_consumption') | float(0) %}
+          {{ (house + inverter) | round(2) }}
 
-#### **Peak Consumption Analysis**
-```yaml
-# Monitor peak power usage
-automation:
-  - alias: "High Power Consumption Alert"
-    trigger:
-      platform: numeric_state
-      entity_id: sensor.leneda_09_measured_active_consumption
-      above: 5.0  # kW threshold
-    action:
-      service: notify.mobile_app
-      data:
-        title: "High Power Usage"
-        message: "Current consumption: {{ states('sensor.leneda_09_measured_active_consumption') }} kW"
-```
+      # Final Grid Import after solar offset
+      - name: "Grid Import Yesterday"
+        unique_id: grid_import_yesterday
+        unit_of_measurement: "kWh"
+        state: >
+          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
+          {% set inverter = states('sensor.leneda_...INVERTER..._yesterdays_consumption') | float(0) %}
+          {% set production = states('sensor.leneda_...INVERTER..._yesterdays_production') | float(0) %}
+          {{ max(0, (house + inverter) - production) | round(2) }}
 
-### 📋 **Billing Period Sensors**
+      # Final Grid Export after self-consumption
+      - name: "Grid Export Yesterday"
+        unique_id: grid_export_yesterday
+        unit_of_measurement: "kWh"
+        state: >
+          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
+          {% set production = states('sensor.leneda_...INVERTER..._yesterdays_production') | float(0) %}
+          {{ max(0, production - house) | round(2) }}
 
-Create sensors that align with your energy provider's billing cycle:
+      # Estimated Energy Cost for Yesterday
+      - name: "Energy Cost Yesterday"
+        unique_id: energy_cost_yesterday
+        unit_of_measurement: "€"
+        device_class: monetary
+        state: >
+          {% set import_kwh = states('sensor.grid_import_yesterday') | float(0) %}
+          {% set export_kwh = states('sensor.grid_export_yesterday') | float(0) %}
+          {% set import_rate = 0.30 %}  # €/kWh - adjust to your rate
+          {% set export_rate = 0.05 %}  # €/kWh - adjust to your feed-in tariff
+          {{ ((import_kwh * import_rate) - (export_kwh * export_rate)) | round(2) }}
+````
 
-```yaml
-template:
-  - sensor:
-      name: "Billing Period Consumption"
-      unit_of_measurement: "kWh"  
-      state: >
-        {# Adjust dates to match your billing cycle #}
-        {% set start_date = '2024-09-01' %}
-        {% set end_date = '2024-09-30' %}
-        {# This would require additional date-based calculations #}
-        {{ states('sensor.leneda_07_current_month_consumption') }}
-```
+---
 
-**Note**: These calculations provide insights into your energy usage and potential savings. Actual billing may include additional fees, taxes, and rate structures not reflected in these basic calculations.
-
-## �🔧 Troubleshooting
-
-### Common Issues
+## 🔧 Troubleshooting
 
 | Issue | Solution |
-|-------|----------|
-| **Sensors show "Unavailable"** | Check API credentials and network connectivity |
-| **Some OBIS sensors show "Unknown"** | Your meter may not support all OBIS codes - this is normal |
-| **Gas sensors missing GAS prefix** | Update to latest version |
-| **Duplicate devices for same meter** | Device consolidation automatic in recent versions |
+|------|----------|
+| Sensors show "Unavailable" | Verify your API Key, Energy ID, and Metering Point ID(s). Check network connectivity. |
+| Some OBIS sensors show "Unknown" | This is normal. Your meter may not support all OBIS codes (e.g., gas sensors for an electric meter). |
+| Duplicate devices appear | This may happen if meter configurations are changed. Removing and re-adding the integration usually resolves this. |
 
 ### Debug Logging
+Enable debug logging by adding to your `configuration.yaml`:
 
-Enable debug logging for troubleshooting:
-
-```yaml
-# configuration.yaml
+````yaml
 logger:
   default: info
   logs:
     custom_components.leneda: debug
-```
+````
 
-### Network Issues
-
-The integration handles DNS timeouts and network issues automatically:
-- Previous values are preserved during outages
-- Sensors remain available even with temporary data loss
-- Automatic retry logic with exponential backoff
+---
 
 ## 📋 Sensor Reference
 
-### Energy Sensors (kWh) - Historical Data
-| # | Sensor Name | Description | Data Available From |
-|---|-------------|-------------|-------------------|
-| 01 | Yesterday's Consumption | Previous day total | Previous day |
-| 02 | Current Week Consumption | Week to date | Previous day |
-| 03 | Last Week's Consumption | Previous week total | Previous day |
-| 04 | Current Month Consumption | Month to date | Previous day |
-| 05 | Previous Month's Consumption | Last month total | Previous day |
-| 16-20 | Production equivalents | Solar/wind production | Previous day |
+The integration creates sensors based on historical data available from the Leneda API.  
+Availability of certain OBIS code sensors depends on your specific meter.
 
-### Power Sensors (kW/kVAR) - OBIS Codes
-| # | Sensor Name | OBIS Code | Description |
-|---|-------------|-----------|-------------|
-| 06 | Measured Active Consumption | 1-1:1.29.0 | Power consumption |
-| 07 | Measured Reactive Consumption | 1-1:3.29.0 | Reactive power consumption |
-| 21 | Measured Active Production | 1-1:2.29.0 | Power generation |
-| 22 | Measured Reactive Production | 1-1:4.29.0 | Reactive power generation |
+### Core Historical Sensors (kWh)
+| Sensor Name | Description |
+|-------------|------------|
+| ..._yesterdays_consumption | Total energy consumed on the previous day. |
+| ..._yesterdays_production | Total energy produced on the previous day. |
+| ..._current_weeks_consumption | Total energy consumed from the start of the current week until yesterday. |
+| ..._current_weeks_production | Total energy produced from the start of the current week until yesterday. |
+| ..._last_weeks_consumption | Total energy consumed during the entire previous week. |
+| ..._last_weeks_production | Total energy produced during the entire previous week. |
+| ..._current_months_consumption | Total energy consumed from the start of the current month until yesterday. |
+| ..._current_months_production | Total energy produced from the start of the current month until yesterday. |
+| ..._last_months_consumption | Total energy consumed during the entire previous month. |
+| ..._last_months_production | Total energy produced during the entire previous month. |
 
-### Gas Sensors
-| # | Sensor Name | OBIS Code | Unit | Description |
-|---|-------------|-----------|------|-------------|
-| 08 | GAS - Measured Consumed Energy | 7-20:99.33.17 | kWh | Gas energy consumption |
-| 09 | GAS - Measured Consumed Volume | 7-1:99.23.15 | m³ | Gas volume consumption |
-| 10 | GAS - Measured Consumed Standard Volume | 7-1:99.23.17 | Nm³ | Normalized gas volume |
+### Calculated Export & Self-Consumption (kWh)
+These sensors are automatically created:
 
-### Energy Community Sharing
-| # | Sensor Name | OBIS Code | Description |
-|---|-------------|-----------|-------------|
-| 11-14 | Consumption Covered by Production (Layers 1-4) | 1-65:1.29.x | Shared energy consumption |
-| 15 | Remaining Consumption After Sharing | 1-65:1.29.9 | Grid import |
-| 23-26 | Production Shared (Layers 1-4) | 1-65:2.29.x | Shared energy production |
-| 27 | Remaining Production After Sharing | 1-65:2.29.9 | Grid export |
+| Sensor Name | Description |
+|-------------|------------|
+| ..._yesterdays_exported_energy | Total energy exported to the grid on the previous day. |
+| ..._yesterdays_self_consumed_energy | Total self-consumed energy from your production on the previous day. |
+| ..._last_weeks_exported_energy | Total energy exported to the grid during the previous week. |
+| ..._last_weeks_self_consumed_energy | Total self-consumed energy during the previous week. |
+| ..._last_months_exported_energy | Total energy exported to the grid during the previous month. |
+| ..._last_months_self_consumed_energy | Total self-consumed energy during the previous month. |
 
-## 🆕 Changelog
+### Direct OBIS Code Sensors
+These provide the raw data used for calculations. Availability depends on your meter.
 
-### v0.2.1 (Current)
-- ✅ Optimized for Leneda's data availability (historical data from previous day)
-- ✅ Streamlined sensor set focused on available data points
-- ✅ Improved error handling and data processing
-- ✅ Enhanced device consolidation for production/consumption meters
-- ✅ Added GAS prefix to all gas sensors
-- ✅ Comprehensive energy billing calculation examples
-- ✅ Better sensor availability logic
+| Sensor Name | OBIS Code | Description |
+|-------------|----------|------------|
+| ..._measured_active_consumption | 1-1:1.29.0 | Raw power consumption data. |
+| ..._measured_active_production | 1-1:2.29.0 | Raw power generation data. |
+| ..._remaining_consumption_after_sharing | 1-65:1.29.9 | Grid Import: Total energy imported from the grid. |
+| ..._remaining_production_after_sharing | 1-65:2.29.9 | Grid Export: Total energy exported to the grid. |
+| Other OBIS codes | various | Reactive power, gas, and energy community sharing data. |
+
+---
 
 ## 🤝 Contributing
+Contributions are welcome!
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with proper documentation
-4. Submit a pull request
+1. **Fork** the repository.
+2. Create a feature branch:  
+   `git checkout -b feature/AmazingFeature`
+3. Make and commit your changes:  
+   `git commit -m 'Add some AmazingFeature'`
+4. Push to the branch:  
+   `git push origin feature/AmazingFeature`
+5. Open a **Pull Request**.
