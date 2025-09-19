@@ -53,9 +53,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             async with async_timeout.timeout(30):
-                # Define date ranges - Account for Leneda processing delays
+                # Define date ranges - Leneda only provides historical data (previous day onwards)
                 today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                live_data_start_dt = now - timedelta(hours=2) # Use 2 hours to account for processing delay
                 month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 week_start_dt = today_start_dt - timedelta(days=now.weekday())
                 yesterday_start_dt = today_start_dt - timedelta(days=1)
@@ -65,66 +64,21 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                 end_of_last_month = first_day_of_current_month - timedelta(microseconds=1)
                 start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                
-                # Use more reasonable time ranges for recent data (account for processing delays)
-                quarter_hour_end_dt = now - timedelta(minutes=30)  # Look 30 mins back to account for delays
-                quarter_hour_start_dt = quarter_hour_end_dt - timedelta(minutes=15)
-                current_hour_start_dt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)  # Previous complete hour
-                current_hour_end_dt = current_hour_start_dt + timedelta(hours=1)
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
 
-                # Tasks for live power data (OBIS codes)
-                _LOGGER.debug("Setting up tasks for live power data...")
-                live_power_tasks = [
+                # Tasks for OBIS code data (historical data from yesterday)
+                _LOGGER.debug("Setting up tasks for OBIS code data...")
+                obis_tasks = [
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id, obis_code, live_data_start_dt, now
+                        self.metering_point_id, obis_code, yesterday_start_dt, yesterday_end_dt
                     ) for obis_code in OBIS_CODES
                 ]
 
-                # Tasks for 15-minute raw data (for energy calculation) - Use completed intervals
-                _LOGGER.debug("Setting up tasks for 15-minute raw data...")
-                quarter_hour_tasks = [
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, quarter_hour_start_dt, quarter_hour_end_dt
-                    ),
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, quarter_hour_start_dt, quarter_hour_end_dt
-                    ),
-                ]
-
-                # Tasks for aggregated data
-                _LOGGER.debug("Setting up tasks for aggregated data...")
+                # Tasks for aggregated historical data only
+                _LOGGER.debug("Setting up tasks for aggregated historical data...")
                 aggregated_tasks = [
-                    # Hourly (Previous complete hour)
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, current_hour_start_dt, current_hour_end_dt, aggregation_level="Hour"
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, current_hour_start_dt, current_hour_end_dt, aggregation_level="Hour"
-                    ),
-                    # Daily (Current day consumption so far)
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, today_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, today_start_dt, now
-                    ),
-                    # Weekly
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, week_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, week_start_dt, now
-                    ),
-                    # Monthly
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, now
-                    ),
                     # Yesterday
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, yesterday_start_dt, yesterday_end_dt
@@ -132,12 +86,26 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
+                    # Weekly (current week so far)
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, week_start_dt, yesterday_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, week_start_dt, yesterday_end_dt
+                    ),
                     # Last Week
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, last_week_start_dt, last_week_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    # Monthly (current month so far)
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, yesterday_end_dt
                     ),
                     # Previous Month
                     self.api_client.async_get_aggregated_metering_data(
@@ -147,37 +115,27 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         self.metering_point_id, PRODUCTION_CODE, start_of_last_month, end_of_last_month
                     ),
                 ]
-                quarter_hour_keys = [
-                    "c_01_quarter_hourly_consumption", "p_01_quarter_hourly_production"
-                ]
                 
                 aggregated_keys = [
-                    "c_02_hourly_consumption", "p_02_hourly_production",
-                    "c_03_daily_consumption", "p_03_daily_production",
-                    "c_05_weekly_consumption", "p_05_weekly_production",
-                    "c_07_monthly_consumption", "p_07_monthly_production",
                     "c_04_yesterday_consumption", "p_04_yesterday_production",
+                    "c_05_weekly_consumption", "p_05_weekly_production",
                     "c_06_last_week_consumption", "p_06_last_week_production",
+                    "c_07_monthly_consumption", "p_07_monthly_production",
                     "c_08_previous_month_consumption", "p_08_previous_month_production",
                 ]
 
                 _LOGGER.debug("Gathering all API tasks...")
-                all_tasks = live_power_tasks + quarter_hour_tasks + aggregated_tasks
+                all_tasks = obis_tasks + aggregated_tasks
                 results = await asyncio.gather(*all_tasks, return_exceptions=True)
                 _LOGGER.debug("All API tasks gathered.")
 
-                live_power_results = results[:len(live_power_tasks)]
-                quarter_hour_results = results[len(live_power_tasks):len(live_power_tasks) + len(quarter_hour_tasks)]
-                aggregated_results = results[len(live_power_tasks) + len(quarter_hour_tasks):]
+                obis_results = results[:len(obis_tasks)]
+                aggregated_results = results[len(obis_tasks):]
 
                 data = self.data.copy() if self.data else {}
 
                 # Initialize all sensor keys with 0.0 if not present (first run)
-                # This prevents "Unknown" state on startup
                 sensor_keys = [
-                    "c_01_quarter_hourly_consumption", "p_01_quarter_hourly_production",
-                    "c_02_hourly_consumption", "p_02_hourly_production",
-                    "c_03_daily_consumption", "p_03_daily_production",
                     "c_04_yesterday_consumption", "p_04_yesterday_production",
                     "c_05_weekly_consumption", "p_05_weekly_production",
                     "c_06_last_week_consumption", "p_06_last_week_production",
@@ -185,17 +143,17 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_08_previous_month_consumption", "p_08_previous_month_production",
                 ]
                 
-                # Set default values only on first run to avoid "Unknown" states
+                # Set default values only on first run
                 for key in sensor_keys:
                     data.setdefault(key, 0.0)
                 
-                # Initialize OBIS code sensors too
+                # Initialize OBIS code sensors
                 for obis_code in OBIS_CODES.keys():
-                    data.setdefault(obis_code, None)  # None is OK for these as they show real-time data
+                    data.setdefault(obis_code, None)
 
-                _LOGGER.debug("Processing live power results...")
-                # Process live power results
-                for obis_code, result in zip(OBIS_CODES.keys(), live_power_results):
+                _LOGGER.debug("Processing OBIS code results...")
+                # Process OBIS code results (yesterday's data)
+                for obis_code, result in zip(OBIS_CODES.keys(), obis_results):
                     if isinstance(result, dict) and result.get("items"):
                         _LOGGER.debug(f"Processing live data for {obis_code}, result: {result}")
                         latest_item = max(result["items"], key=lambda x: dt_util.parse_datetime(x["startedAt"]))
@@ -227,39 +185,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         # Keep existing value if available for empty responses
                         if obis_code not in data:
                             data[obis_code] = None
-
-                _LOGGER.debug("Processing 15-minute results...")
-                # Process 15-minute results for energy calculation (kW * 0.25h = kWh)
-                quarter_hour_codes = [CONSUMPTION_CODE, PRODUCTION_CODE]
-                for key, code, result in zip(quarter_hour_keys, quarter_hour_codes, quarter_hour_results):
-                    if isinstance(result, dict) and result.get("items"):
-                        _LOGGER.debug(f"Processing 15-min data for {key}, result: {result}")
-                        # Sum all 15-minute intervals and convert to kWh
-                        total_kwh = sum(item["value"] * 0.25 for item in result["items"])
-                        data[key] = total_kwh
-                        _LOGGER.debug(f"15-minute energy for {key}: {total_kwh} kWh")
-                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
-                        # Network errors: preserve previous values
-                        _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
-                        if key not in data:
-                            data[key] = 0.0
-                    elif isinstance(result, Exception):
-                        _LOGGER.error("Error fetching 15-minute data for %s: %s", key, result)
-                        # Keep previous value if available, don't reset to 0
-                        if key not in data:
-                            data[key] = 0.0
-                    else:
-                        # Handle empty responses more quietly - this is common for recent time periods
-                        if isinstance(result, dict):
-                            if result.get("meteringPointCode") is None:
-                                _LOGGER.debug("API returned null response for 15-minute data %s (meter may not support this OBIS code)", key)
-                            else:
-                                _LOGGER.debug("No items found for 15-minute data %s (processing delay - trying older time range)", key)
-                        else:
-                            _LOGGER.warning("Unexpected response type for 15-minute data %s: %s", key, result)
-                        # Set to 0.0 for energy sensors when no data available
-                        data[key] = 0.0
-
 
                 _LOGGER.debug("Processing aggregated results...")
                 # Process aggregated results
