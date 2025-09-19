@@ -13,10 +13,30 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES
+from .const import CONF_METERING_POINT_ID, DOMAIN, ALL_OBIS_CODES, METER_TYPE_ELECTRICITY
 from .coordinator import LenedaDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# A mapping of the internal keys for aggregated energy sensors to their friendly names
+AGGREGATED_ENERGY_SENSORS = {
+    "c_01_quarter_hourly_consumption": "01 - 15-Minute Consumption",
+    "p_01_quarter_hourly_production": "19 - 15-Minute Production",
+    "c_02_hourly_consumption": "02 - Hourly Consumption",
+    "p_02_hourly_production": "20 - Hourly Production",
+    "c_03_daily_consumption": "03 - Current Day Consumption",
+    "p_03_daily_production": "21 - Current Day Production",
+    "c_04_yesterday_consumption": "04 - Yesterday's Consumption",
+    "p_04_yesterday_production": "22 - Yesterday's Production",
+    "c_05_weekly_consumption": "05 - Current Week Consumption",
+    "p_05_weekly_production": "23 - Current Week Production",
+    "c_06_last_week_consumption": "06 - Last Week's Consumption",
+    "p_06_last_week_production": "24 - Last Week's Production",
+    "c_07_monthly_consumption": "07 - Current Month Consumption",
+    "p_07_monthly_production": "25 - Current Month Production",
+    "c_08_previous_month_consumption": "08 - Previous Month's Consumption",
+    "p_08_previous_month_production": "26 - Previous Month's Production",
+}
 
 
 async def async_setup_entry(
@@ -27,70 +47,27 @@ async def async_setup_entry(
     """Set up Leneda sensors from a config entry."""
     coordinator: LenedaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
+    device_name = entry.title
 
-    _LOGGER.debug("Setting up Leneda sensors for metering point %s", metering_point_id)
-
-    all_sensors_ordered = [
-        # Consumption
-        ("c_01_quarter_hourly_consumption", "01 - 15-Minute Consumption", "energy"),
-        ("c_02_hourly_consumption", "02 - Hourly Consumption", "energy"),
-        ("c_03_daily_consumption", "03 - Current Day Consumption", "energy"),
-        ("c_04_yesterday_consumption", "04 - Yesterday's Consumption", "energy"),
-        ("c_05_weekly_consumption", "05 - Current Week Consumption", "energy"),
-        ("c_06_last_week_consumption", "06 - Last Week's Consumption", "energy"),
-        ("c_07_monthly_consumption", "07 - Current Month Consumption", "energy"),
-        ("c_08_previous_month_consumption", "08 - Previous Month's Consumption", "energy"),
-        ("1-1:1.29.0", "09 - Measured Active Consumption", "obis"),
-        ("1-1:3.29.0", "10 - Measured Reactive Consumption", "obis"),
-        ("7-20:99.33.17", "11 - Measured Consumed Energy", "obis"),
-        ("7-1:99.23.15", "12 - Measured Consumed Volume", "obis"),
-        ("7-1:99.23.17", "13 - Measured Consumed Standard Volume", "obis"),
-        ("1-65:1.29.1", "14 - Consumption Covered by Production (Layer 1)", "obis"),
-        ("1-65:1.29.3", "15 - Consumption Covered by Production (Layer 2)", "obis"),
-        ("1-65:1.29.2", "16 - Consumption Covered by Production (Layer 3)", "obis"),
-        ("1-65:1.29.4", "17 - Consumption Covered by Production (Layer 4)", "obis"),
-        ("1-65:1.29.9", "18 - Remaining Consumption After Sharing", "obis"),
-        # Production
-        ("p_01_quarter_hourly_production", "19 - 15-Minute Production", "energy"),
-        ("p_02_hourly_production", "20 - Hourly Production", "energy"),
-        ("p_03_daily_production", "21 - Current Day Production", "energy"),
-        ("p_04_yesterday_production", "22 - Yesterday's Production", "energy"),
-        ("p_05_weekly_production", "23 - Current Week Production", "energy"),
-        ("p_06_last_week_production", "24 - Last Week's Production", "energy"),
-        ("p_07_monthly_production", "25 - Current Month Production", "energy"),
-        ("p_08_previous_month_production", "26 - Previous Month's Production", "energy"),
-        ("1-1:2.29.0", "27 - Measured Active Production", "obis"),
-        ("1-1:4.29.0", "28 - Measured Reactive Production", "obis"),
-        ("1-65:2.29.1", "29 - Production Shared (Layer 1)", "obis"),
-        ("1-65:2.29.3", "30 - Production Shared (Layer 2)", "obis"),
-        ("1-65:2.29.2", "31 - Production Shared (Layer 3)", "obis"),
-        ("1-65:2.29.4", "32 - Production Shared (Layer 4)", "obis"),
-        ("1-65:2.29.9", "33 - Remaining Production After Sharing", "obis"),
-    ]
+    _LOGGER.debug("Setting up Leneda sensors for device '%s' (meter %s)", device_name, metering_point_id)
 
     sensors = []
-    _LOGGER.debug("Creating sensors in the following order:")
-    for key, name, sensor_type in all_sensors_ordered:
-        _LOGGER.debug(f"  - Key: {key}, Name: {name}, Type: {sensor_type}")
-        if sensor_type == "energy":
-            sensors.append(
-                LenedaEnergySensor(coordinator, metering_point_id, key, name)
-            )
-        elif sensor_type == "obis":
-            if key in OBIS_CODES:
-                details = OBIS_CODES[key]
-                details_with_override = details.copy()
-                details_with_override["name"] = name
-                sensors.append(
-                    LenedaSensor(coordinator, metering_point_id, key, details_with_override)
-                )
 
-    _LOGGER.debug("Adding %d entities.", len(sensors))
+    # Dynamically create sensors based on the OBIS codes the coordinator is fetching
+    for obis_code, details in coordinator.obis_codes_to_fetch.items():
+        sensors.append(LenedaSensor(coordinator, metering_point_id, device_name, obis_code, details))
+
+    # Dynamically create aggregated energy sensors ONLY if the meter is for electricity
+    if METER_TYPE_ELECTRICITY in coordinator.meter_types:
+        for key, name in AGGREGATED_ENERGY_SENSORS.items():
+            sensors.append(LenedaEnergySensor(coordinator, metering_point_id, device_name, key, name))
+
+    _LOGGER.debug("Adding %d Leneda entities for device '%s'.", len(sensors), device_name)
     async_add_entities(sensors)
 
 
 class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity):
-    """Representation of a Leneda sensor."""
+    """Representation of a Leneda OBIS code sensor."""
 
     _attr_has_entity_name = True
 
@@ -98,6 +75,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self,
         coordinator: LenedaDataUpdateCoordinator,
         metering_point_id: str,
+        device_name: str,
         obis_code: str,
         details: dict,
     ):
@@ -105,15 +83,16 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         super().__init__(coordinator)
         self._obis_code = obis_code
         self._attr_name = details["name"]
-        self._attr_unique_id = f"{metering_point_id}_{obis_code}_v2"
+        self._attr_unique_id = f"{metering_point_id}_{obis_code}"
         self._attr_native_unit_of_measurement = details["unit"]
 
+        # Set device class and state class based on unit
         if details["unit"] == "kW":
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif details["unit"] == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_state_class = SensorStateClass.TOTAL
         elif details["unit"] == "kVAR":
             self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
             self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -124,10 +103,9 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_icon = "mdi:flash"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, metering_point_id)},
-            name=f"Leneda (...{metering_point_id[-4:]})",
+            name=device_name,
             manufacturer="Leneda",
             model="Metering Point",
-            sw_version=coordinator.version,
         )
 
     @property
@@ -161,7 +139,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
 
     _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:chart-bar"
 
@@ -169,6 +147,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         self,
         coordinator: LenedaDataUpdateCoordinator,
         metering_point_id: str,
+        device_name: str,
         sensor_key: str,
         name: str,
     ):
@@ -176,14 +155,13 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         super().__init__(coordinator)
         self._key = sensor_key
         self._attr_name = name
-        self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v2"
+        self._attr_unique_id = f"{metering_point_id}_{sensor_key}"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, metering_point_id)},
-            name=f"Leneda (...{metering_point_id[-4:]})",
+            name=device_name,
             manufacturer="Leneda",
             model="Metering Point",
-            sw_version=coordinator.version,
         )
 
     @property
