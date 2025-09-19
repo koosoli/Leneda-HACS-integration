@@ -73,6 +73,13 @@ async def async_setup_entry(
         ("1-65:2.29.2", "25 - Production Shared (Layer 3)", "obis"),
         ("1-65:2.29.4", "26 - Production Shared (Layer 4)", "obis"),
         ("1-65:2.29.9", "27 - Remaining Production After Sharing", "obis"),
+        # Custom aggregated sensors for export and self-consumption
+        ("p_09_yesterday_exported", "28 - Yesterday's Exported Energy", "energy"),
+        ("p_12_yesterday_self_consumed", "29 - Yesterday's Self-Consumed Energy", "energy"),
+        ("p_10_last_week_exported", "30 - Last Week's Exported Energy", "energy"),
+        ("p_13_last_week_self_consumed", "31 - Last Week's Self-Consumed Energy", "energy"),
+        ("p_11_last_month_exported", "32 - Last Month's Exported Energy", "energy"),
+        ("p_14_last_month_self_consumed", "33 - Last Month's Self-Consumed Energy", "energy"),
     ]
 
     sensors = []
@@ -120,24 +127,22 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             # This is a gas sensor, use gas icon and device class
             self._attr_device_class = SensorDeviceClass.GAS
             self._attr_icon = "mdi:gas-cylinder"
-            # Gas consumption is always increasing
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        elif details["unit"] == "kW":
-            self._attr_device_class = SensorDeviceClass.POWER
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_icon = "mdi:flash"
-        elif details["unit"] == "kWh":
-            self._attr_device_class = SensorDeviceClass.ENERGY
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            self._attr_icon = "mdi:flash"
-        elif details["unit"] == "kVAR":
-            self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-            self._attr_icon = "mdi:flash"
         else:
-            # Fallback for other units
-            self._attr_state_class = SensorStateClass.MEASUREMENT
+            # Default icon for non-gas sensors
             self._attr_icon = "mdi:flash"
+            if details["unit"] == "kW":
+                self._attr_device_class = SensorDeviceClass.POWER
+                self._attr_state_class = SensorStateClass.MEASUREMENT
+            elif details["unit"] == "kWh":
+                self._attr_device_class = SensorDeviceClass.ENERGY
+                self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            elif details["unit"] == "kVAR":
+                self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
+                self._attr_state_class = SensorStateClass.MEASUREMENT
+            else:
+                # Fallback for other units
+                self._attr_state_class = SensorStateClass.MEASUREMENT
         
         # Extract base metering point ID for device consolidation
         # Leneda often creates separate IDs for production/consumption of same meter

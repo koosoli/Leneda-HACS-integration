@@ -67,6 +67,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
+                EXPORT_CODE = "1-65:2.29.9"
 
                 # Tasks for OBIS code data (historical data from yesterday)
                 _LOGGER.debug("Setting up tasks for OBIS code data...")
@@ -86,6 +87,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, EXPORT_CODE, yesterday_start_dt, yesterday_end_dt
+                    ),
                     # Weekly (current week so far)
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, week_start_dt, yesterday_end_dt
@@ -99,6 +103,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, EXPORT_CODE, last_week_start_dt, last_week_end_dt
                     ),
                     # Monthly (current month so far)
                     self.api_client.async_get_aggregated_metering_data(
@@ -114,14 +121,17 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, start_of_last_month, end_of_last_month
                     ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, EXPORT_CODE, start_of_last_month, end_of_last_month
+                    ),
                 ]
                 
                 aggregated_keys = [
-                    "c_04_yesterday_consumption", "p_04_yesterday_production",
+                    "c_04_yesterday_consumption", "p_04_yesterday_production", "p_09_yesterday_exported",
                     "c_05_weekly_consumption", "p_05_weekly_production",
-                    "c_06_last_week_consumption", "p_06_last_week_production",
+                    "c_06_last_week_consumption", "p_06_last_week_production", "p_10_last_week_exported",
                     "c_07_monthly_consumption", "p_07_monthly_production",
-                    "c_08_previous_month_consumption", "p_08_previous_month_production",
+                    "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
                 ]
 
                 _LOGGER.debug("Gathering all API tasks...")
@@ -223,6 +233,28 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         # Keep previous value if available
                         if key not in data: 
                             data[key] = 0.0
+
+                # Calculate self-consumption values
+                try:
+                    # Yesterday
+                    prod_yesterday = data.get("p_04_yesterday_production")
+                    export_yesterday = data.get("p_09_yesterday_exported")
+                    if prod_yesterday is not None and export_yesterday is not None:
+                        data["p_12_yesterday_self_consumed"] = round(prod_yesterday - export_yesterday, 2)
+
+                    # Last Week
+                    prod_last_week = data.get("p_06_last_week_production")
+                    export_last_week = data.get("p_10_last_week_exported")
+                    if prod_last_week is not None and export_last_week is not None:
+                        data["p_13_last_week_self_consumed"] = round(prod_last_week - export_last_week, 2)
+
+                    # Last Month
+                    prod_last_month = data.get("p_08_previous_month_production")
+                    export_last_month = data.get("p_11_last_month_exported")
+                    if prod_last_month is not None and export_last_month is not None:
+                        data["p_14_last_month_self_consumed"] = round(prod_last_month - export_last_month, 2)
+                except (TypeError, ValueError) as e:
+                    _LOGGER.error("Could not calculate self-consumption values: %s", e)
 
                 _LOGGER.debug("--- Leneda Data Update Finished ---")
                 _LOGGER.debug("Final coordinated data: %s", data)
