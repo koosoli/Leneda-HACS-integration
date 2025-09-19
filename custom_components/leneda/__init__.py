@@ -12,7 +12,13 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 
 from .api import LenedaApiClient
-from .const import CONF_API_KEY, CONF_ENERGY_ID, CONF_METERING_POINT_ID, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_ENERGY_ID,
+    CONF_METERING_POINT_ID,
+    CONF_METER_TYPE,
+    DOMAIN,
+)
 from .coordinator import LenedaDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -24,11 +30,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api_client = LenedaApiClient(
         session,
         entry.data[CONF_API_KEY],
-        entry.data[CONF_ENERGY_ID]
+        entry.data[CONF_ENERGY_ID],
     )
-    metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    coordinator = LenedaDataUpdateCoordinator(hass, api_client, metering_point_id)
+    coordinator = LenedaDataUpdateCoordinator(
+        hass,
+        api_client=api_client,
+        metering_point_id=entry.data[CONF_METERING_POINT_ID],
+        meter_type=entry.data[CONF_METER_TYPE],
+    )
 
     manifest_path = Path(__file__).parent / "manifest.json"
     with manifest_path.open() as manifest_file:

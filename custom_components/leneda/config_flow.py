@@ -9,6 +9,7 @@ from .const import (
     CONF_API_KEY,
     CONF_ENERGY_ID,
     CONF_METERING_POINT_ID,
+    CONF_METER_TYPE,
     DOMAIN,
 )
 
@@ -30,12 +31,27 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 session, user_input[CONF_API_KEY], user_input[CONF_ENERGY_ID]
             )
             try:
-                await api_client.test_credentials(user_input[CONF_METERING_POINT_ID])
-                return self.async_create_entry(title="Leneda", data=user_input)
+                metering_point_id = user_input[CONF_METERING_POINT_ID]
+
+                # Prevent duplicate entries
+                await self.async_set_unique_id(metering_point_id)
+                self._abort_if_unique_id_configured()
+
+                # Determine the meter types automatically
+                meter_types = await api_client.async_determine_meter_types(metering_point_id)
+
+                data = {**user_input, CONF_METER_TYPE: meter_types}
+
+                # Create a descriptive title
+                type_str = "/".join(t.capitalize() for t in meter_types)
+                title = f"Leneda {type_str} - {metering_point_id}"
+
+                return self.async_create_entry(title=title, data=data)
+
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
             except NoDataError:
-                errors["base"] = "no_data"
+                errors["base"] = "no_data_or_type"
             except LenedaApiError:
                 errors["base"] = "cannot_connect"
             except Exception:
