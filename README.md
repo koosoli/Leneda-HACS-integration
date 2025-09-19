@@ -4,7 +4,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/koosoli/Leneda-HACS-integration)](https://github.com/koosoli/Leneda-HACS-integration/releases)
 [![GitHub](https://img.shields.io/github/license/koosoli/Leneda-HACS-integration)](https://github.com/koosoli/Leneda-HACS-integration/blob/main/LICENSE)
 
-A comprehensive Home Assistant integration for [Leneda](https://leneda.eu) smart energy meters in Luxembourg. Monitor your electricity and gas consumption, production, and energy community sharing data in real-time.
+A comprehensive Home Assistant integration for [Leneda](https://leneda.eu) smart energy meters in Luxembourg. Monitor your electricity and gas consumption, production, and energy community sharing data with daily updates.
 
 ## 🚀 Features
 
