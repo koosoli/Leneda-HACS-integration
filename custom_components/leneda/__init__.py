@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         api_client=api_client,
         metering_point_id=entry.data[CONF_METERING_POINT_ID],
-        meter_type=entry.data[CONF_METER_TYPE],
+        meter_types=entry.data[CONF_METER_TYPE],
     )
 
     manifest_path = Path(__file__).parent / "manifest.json"
