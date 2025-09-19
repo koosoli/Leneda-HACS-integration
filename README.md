@@ -14,7 +14,7 @@ A comprehensive Home Assistant integration for [Leneda](https://leneda.eu) smart
 - **Gas Metering**: Support for gas volume (m³, Nm³) and energy (kWh) measurements
 - **Energy Communities**: Track production sharing across multiple layers (AIR, ACR/ACF/AC1, CEL, APS/CER/CEN)
 
-### 🔄 **Device Consolidation**  (buggy)
+### 🔄 **Device Consolidation** 
 - **Unified Meters**: Automatically merges production and consumption data from the same physical meter
 - **Smart Grouping**: Groups sensors by base meter ID to avoid duplicate devices
 - **Zero-Value Protection**: Preserves previous values when API calls fail instead of showing zero
@@ -159,7 +159,8 @@ With solar panels and smart meters, understanding your energy billing involves t
 
 #### **Solar Auto-Consumption**
 ```
-Auto-Consumed Solar = Solar Production - Grid Export
+Net Solar Production = Solar Production - Inverter Consumption
+Auto-Consumed Solar = Net Solar Production - Grid Export
 ```
 
 **Using Leneda Sensors:**
@@ -171,8 +172,18 @@ template:
       unit_of_measurement: "kWh"
       state: >
         {% set production = states('sensor.leneda_21_current_day_production') | float %}
+        {% set inverter = states('sensor.leneda_03_current_day_consumption') | float %}
         {% set export = states('sensor.leneda_33_remaining_production_after_sharing') | float %}
-        {{ (production - export) | round(2) }}
+        {% set net_production = production - inverter %}
+        {{ (net_production - export) | round(2) }}
+
+  - sensor:
+      name: "Net Solar Production Today"
+      unit_of_measurement: "kWh"
+      state: >
+        {% set production = states('sensor.leneda_21_current_day_production') | float %}
+        {% set inverter = states('sensor.leneda_03_current_day_consumption') | float %}
+        {{ (production - inverter) | round(2) }}
 ```
 
 #### **Self-Sufficiency Percentage**
@@ -199,31 +210,45 @@ template:
 
 #### **Grid Import/Export Balance**
 ```
-Net Grid Balance = Grid Import - Grid Export
-Positive = You pay for net import
-Negative = You get paid for net export
+Total Consumption = House Consumption + Inverter Consumption  
+Net Solar Available = Solar Production - Inverter Consumption
+Grid Import = max(0, Total Consumption - Net Solar Available)
+Grid Export = max(0, Net Solar Available - House Consumption)
 ```
 
 **Template Sensors:**
 ```yaml
 template:
   - sensor:
-      # Grid Import (what you pay for)
+      # Total consumption you pay for (including inverter)
+      name: "Total Energy Consumption Today"
+      unit_of_measurement: "kWh"
+      state: >
+        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
+        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
+        {{ (house + inverter) | round(2) }}
+
+  - sensor:
+      # Grid Import (what you pay for) - Simple method to avoid double-counting
       name: "Grid Import Today"
       unit_of_measurement: "kWh"
       state: >
-        {% set consumption = states('sensor.leneda_03_current_day_consumption') | float %}
-        {% set production = states('sensor.leneda_21_current_day_production') | float %}
-        {{ max(0, consumption - production) | round(2) }}
+        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
+        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
+        {% set production = states('sensor.leneda_0176_21_current_day_production') | float %}
+        {# Total consumption minus solar production that can offset it #}
+        {{ max(0, (house + inverter) - production) | round(2) }}
 
   - sensor:
       # Grid Export (what you get paid for)  
       name: "Grid Export Today"
       unit_of_measurement: "kWh"
       state: >
-        {% set consumption = states('sensor.leneda_03_current_day_consumption') | float %}
-        {% set production = states('sensor.leneda_21_current_day_production') | float %}
-        {{ max(0, production - consumption) | round(2) }}
+        {% set house = states('sensor.leneda_6600_03_current_day_consumption') | float %}
+        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
+        {% set production = states('sensor.leneda_0176_21_current_day_production') | float %}
+        {% set net_solar = production - inverter %}
+        {{ max(0, net_solar - house) | round(2) }}
 ```
 
 #### **Energy Cost Calculation**
@@ -249,15 +274,43 @@ If you have both main solar panels and a Balkonkraftwerk (plug-in solar):
 ```yaml
 template:
   - sensor:
+      name: "Total Energy Cost Today"
+      unit_of_measurement: "€"
+      state: >
+        {% set house_net = states('sensor.leneda_6600_03_current_day_consumption') | float %}
+        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
+        {% set main_solar = states('sensor.leneda_0176_21_current_day_production') | float %}
+        {% set main_export = states('sensor.leneda_0176_33_remaining_production_after_sharing') | float(0) %}
+        {% set import_rate = 0.30 %}  # €/kWh
+        {% set export_rate = 0.05 %}  # €/kWh
+        
+        {# Total consumption you pay for (house + inverter) #}
+        {% set total_consumption = house_net + inverter %}
+        {# Net solar available after inverter consumption #}
+        {% set net_solar = main_solar - inverter %}
+        {# Auto-consumed solar (reduces grid import) #}
+        {% set auto_consumed = min(house_net, net_solar) %}
+        {# Grid import cost #}
+        {% set grid_import = max(0, total_consumption - net_solar) %}
+        {# Grid export revenue #}
+        {% set grid_export = max(0, net_solar - house_net) %}
+        
+        {{ ((grid_import * import_rate) - (grid_export * export_rate)) | round(2) }}
+
+  - sensor:
       name: "Total Solar Auto-Consumption"
       unit_of_measurement: "kWh"
       state: >
         {% set house_net = states('sensor.leneda_6600_03_current_day_consumption') | float %}
         {% set main_solar = states('sensor.leneda_0176_21_current_day_production') | float %}
+        {% set inverter = states('sensor.leneda_0176_03_current_day_consumption') | float %}
         {% set main_export = states('sensor.leneda_0176_33_remaining_production_after_sharing') | float(0) %}
-        {% set main_auto = main_solar - main_export %}
-        # Balkonkraftwerk auto-consumption is already included in reduced house consumption
-        # This shows minimum known auto-consumption from main solar
+        
+        {# Net solar available (after inverter consumption) #}
+        {% set net_solar = main_solar - inverter %}
+        {# Main solar auto-consumption (excludes Balkonkraftwerk which is already in house meter) #}
+        {% set main_auto = min(house_net, net_solar) %}
+        
         {{ main_auto | round(2) }}
 ```
 
