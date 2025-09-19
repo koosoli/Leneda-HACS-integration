@@ -14,7 +14,7 @@ A comprehensive Home Assistant integration for [Leneda](https://leneda.eu) smart
 - **Gas Metering**: Support for gas volume (m³, Nm³) and energy (kWh) measurements
 - **Energy Communities**: Track production sharing across multiple layers (AIR, ACR/ACF/AC1, CEL, APS/CER/CEN)
 
-### 🔄 **Device Consolidation** 
+### 🔄 **Device Consolidation**  (buggy)
 - **Unified Meters**: Automatically merges production and consumption data from the same physical meter
 - **Smart Grouping**: Groups sensors by base meter ID to avoid duplicate devices
 - **Zero-Value Protection**: Preserves previous values when API calls fail instead of showing zero
