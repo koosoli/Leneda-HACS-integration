@@ -41,7 +41,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=15),
+            update_interval=timedelta(hours=1),
         )
         self.api_client = api_client
         self.metering_point_id = metering_point_id
