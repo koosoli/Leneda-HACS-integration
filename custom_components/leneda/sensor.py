@@ -26,7 +26,14 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_METERING_POINT_ID, DOMAIN, OBIS_CODES, GAS_OBIS_CODES
+from .const import (
+    CONF_METERING_POINT_ID,
+    DOMAIN,
+    OBIS_CODES,
+    GAS_OBIS_CODES,
+    CONF_REFERENCE_POWER_ENTITY,
+    CONF_REFERENCE_POWER_STATIC,
+)
 from .coordinator import LenedaDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -107,7 +114,7 @@ async def async_setup_entry(
     ]
 
     # Conditionally add the power usage over reference sensor
-    if coordinator.reference_power_entity:
+    if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
         all_sensors_ordered.append(
             ("yesterdays_power_usage_over_reference", "50 - Yesterday's Power Usage Over Reference", "energy")
         )

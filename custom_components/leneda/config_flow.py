@@ -11,6 +11,7 @@ from .const import (
     CONF_ENERGY_ID,
     CONF_METERING_POINT_ID,
     CONF_REFERENCE_POWER_ENTITY,
+    CONF_REFERENCE_POWER_STATIC,
     DOMAIN,
 )
 
@@ -27,22 +28,28 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Leneda config flow started.")
         errors = {}
         if user_input is not None:
-            session = async_get_clientsession(self.hass)
-            api_client = LenedaApiClient(
-                session, user_input[CONF_API_KEY], user_input[CONF_ENERGY_ID]
-            )
-            try:
-                await api_client.test_credentials(user_input[CONF_METERING_POINT_ID])
-                return self.async_create_entry(title="Leneda", data=user_input)
-            except InvalidAuth:
-                errors["base"] = "invalid_auth"
-            except NoDataError:
-                errors["base"] = "no_data"
-            except LenedaApiError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected exception during Leneda setup")
-                errors["base"] = "unknown"
+            # Validation: Ensure either entity or static value is provided, but not both.
+            ref_entity = user_input.get(CONF_REFERENCE_POWER_ENTITY)
+            ref_static = user_input.get(CONF_REFERENCE_POWER_STATIC)
+            if ref_entity and ref_static:
+                errors["base"] = "ambiguous_reference"
+            else:
+                session = async_get_clientsession(self.hass)
+                api_client = LenedaApiClient(
+                    session, user_input[CONF_API_KEY], user_input[CONF_ENERGY_ID]
+                )
+                try:
+                    await api_client.test_credentials(user_input[CONF_METERING_POINT_ID])
+                    return self.async_create_entry(title="Leneda", data=user_input)
+                except InvalidAuth:
+                    errors["base"] = "invalid_auth"
+                except NoDataError:
+                    errors["base"] = "no_data"
+                except LenedaApiError:
+                    errors["base"] = "cannot_connect"
+                except Exception:
+                    _LOGGER.exception("Unexpected exception during Leneda setup")
+                    errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="user",
@@ -53,6 +60,15 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_ENERGY_ID): str,
                     vol.Optional(CONF_REFERENCE_POWER_ENTITY): sel.EntitySelector(
                         sel.EntitySelectorConfig(domain="input_number"),
+                    ),
+                    vol.Optional(CONF_REFERENCE_POWER_STATIC): sel.NumberSelector(
+                        sel.NumberSelectorConfig(
+                            min=0,
+                            max=100,
+                            step=0.1,
+                            mode="box",
+                            unit_of_measurement="kW",
+                        ),
                     ),
                 }
             ),
