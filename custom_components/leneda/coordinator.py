@@ -70,6 +70,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 EXPORT_CODE = "1-65:2.29.9"
                 GAS_OBIS_CODE = "7-20:99.33.17"
 
+                SHARING_CODES = {
+                    "s_c_l1": "1-65:1.29.1", "s_c_l2": "1-65:1.29.3", "s_c_l3": "1-65:1.29.2", "s_c_l4": "1-65:1.29.4", "s_c_rem": "1-65:1.29.9",
+                    "s_p_l1": "1-65:2.29.1", "s_p_l2": "1-65:2.29.3", "s_p_l3": "1-65:2.29.2", "s_p_l4": "1-65:2.29.4", "s_p_rem": "1-65:2.29.9",
+                }
+
                 # Tasks for OBIS code data (historical data from yesterday)
                 _LOGGER.debug("Setting up tasks for OBIS code data...")
                 obis_tasks = [
@@ -115,6 +120,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, month_start_dt, yesterday_end_dt
                     ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, EXPORT_CODE, month_start_dt, yesterday_end_dt
+                    ),
                     # Previous Month
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, CONSUMPTION_CODE, start_of_last_month, end_of_last_month
@@ -136,20 +144,32 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
                     ),
+                    # Current Month's Gas
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt
+                    ),
                     # Previous Month's Gas
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
                     ),
                 ])
 
+                # Add tasks for sharing codes for last month
+                for key, code in SHARING_CODES.items():
+                    aggregated_tasks.append(self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, code, start_of_last_month, end_of_last_month
+                    ))
+
                 aggregated_keys = [
                     "c_04_yesterday_consumption", "p_04_yesterday_production", "p_09_yesterday_exported",
                     "c_05_weekly_consumption", "p_05_weekly_production",
                     "c_06_last_week_consumption", "p_06_last_week_production", "p_10_last_week_exported",
-                    "c_07_monthly_consumption", "p_07_monthly_production",
+                    "c_07_monthly_consumption", "p_07_monthly_production", "p_15_monthly_exported",
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
-                    "g_01_yesterday_consumption", "g_02_last_week_consumption", "g_03_last_month_consumption",
+                    "g_01_yesterday_consumption", "g_02_last_week_consumption", "g_04_monthly_consumption", "g_03_last_month_consumption",
                 ]
+
+                aggregated_keys.extend([f"{key}_last_month" for key in SHARING_CODES.keys()])
 
                 _LOGGER.debug("Gathering all API tasks...")
                 all_tasks = obis_tasks + aggregated_tasks
@@ -182,12 +202,13 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # Process OBIS code results (yesterday's data)
                 for obis_code, result in zip(OBIS_CODES.keys(), obis_results):
                     if isinstance(result, dict) and result.get("items"):
-                        _LOGGER.debug(f"Processing live data for {obis_code}, result: {result}")
-                        latest_item = max(result["items"], key=lambda x: dt_util.parse_datetime(x["startedAt"]))
-                        value = latest_item["value"]
+                        _LOGGER.debug(f"Processing peak data for {obis_code}, result: {result}")
+                        # Find the item with the maximum value for the day (peak)
+                        peak_item = max(result["items"], key=lambda x: x["value"])
+                        value = peak_item["value"]
                         data[obis_code] = value
-                        data[f"{obis_code}_data_timestamp"] = latest_item["startedAt"]
-                        _LOGGER.debug(f"Latest item for {obis_code}: {latest_item}")
+                        data[f"{obis_code}_peak_timestamp"] = peak_item["startedAt"]
+                        _LOGGER.debug(f"Peak item for {obis_code}: {peak_item}")
                     elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
                         # Network errors: preserve previous values
                         _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
@@ -264,6 +285,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     export_last_week = data.get("p_10_last_week_exported")
                     if prod_last_week is not None and export_last_week is not None:
                         data["p_13_last_week_self_consumed"] = round(prod_last_week - export_last_week, 2)
+
+                    # Current Month
+                    prod_monthly = data.get("p_07_monthly_production")
+                    export_monthly = data.get("p_15_monthly_exported")
+                    if prod_monthly is not None and export_monthly is not None:
+                        data["p_16_monthly_self_consumed"] = round(prod_monthly - export_monthly, 2)
 
                     # Last Month
                     prod_last_month = data.get("p_08_previous_month_production")

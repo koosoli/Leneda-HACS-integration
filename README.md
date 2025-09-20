@@ -21,6 +21,7 @@ Monitor your **electricity and gas consumption and production** with daily updat
 - **Resilient**: Handles network issues and temporary API outages gracefully, preserving the last known sensor state.
 
 ### 📊 Comprehensive Sensors
+- **Peak Power Tracking**: Automatically creates sensors for yesterday's peak power consumption and production.
 - **Complete Coverage**: Provides a full suite of sensors for all available historical data points, including consumption, production, gas, grid import/export, and energy sharing.
 
 ---
@@ -74,13 +75,13 @@ Create Utility Meter Helpers by adding the following to your `configuration.yaml
 # configuration.yaml
 utility_meter:
   daily_grid_import:
-    source: sensor.leneda_...XXXX..._remaining_consumption_after_sharing
+    source: sensor.leneda_...XXXX..._yesterdays_consumption
     cycle: daily
   daily_grid_export:
-    source: sensor.leneda_...XXXX..._remaining_production_after_sharing
+    source: sensor.leneda_...XXXX..._yesterdays_exported_energy
     cycle: daily
   daily_solar_production:
-    source: sensor.leneda_...XXXX..._measured_active_production
+    source: sensor.leneda_...XXXX..._yesterdays_production
     cycle: daily
 ````
 
@@ -182,45 +183,67 @@ logger:
 
 ## 📋 Sensor Reference
 
-The integration creates sensors based on historical data available from the Leneda API.  
-Availability of certain OBIS code sensors depends on your specific meter.
+The integration provides a wide range of sensors. The `...` in the entity ID will be replaced by your meter's unique identifier.
 
-### Core Historical Sensors (kWh)
-| Sensor Name | Description |
-|-------------|------------|
-| ..._yesterdays_consumption | Total energy consumed on the previous day. |
-| ..._yesterdays_production | Total energy produced on the previous day. |
-| ..._current_weeks_consumption | Total energy consumed from the start of the current week until yesterday. |
-| ..._current_weeks_production | Total energy produced from the start of the current week until yesterday. |
-| ..._last_weeks_consumption | Total energy consumed during the entire previous week. |
-| ..._last_weeks_production | Total energy produced during the entire previous week. |
-| ..._current_months_consumption | Total energy consumed from the start of the current month until yesterday. |
-| ..._current_months_production | Total energy produced from the start of the current month until yesterday. |
-| ..._last_months_consumption | Total energy consumed during the entire previous month. |
-| ..._last_months_production | Total energy produced during the entire previous month. |
+### Summary Sensors (kWh)
+These are the main sensors for tracking aggregated usage over time.
 
-### Calculated Export & Self-Consumption (kWh)
-These sensors are automatically created:
+| Entity ID Suffix | UI Name | Description |
+|------------------|---------|-------------|
+| `..._yesterdays_consumption` | Yesterday's Consumption | Total energy consumed yesterday. |
+| `..._current_week_consumption` | Current Week Consumption | Total energy consumed from the start of the current week until yesterday. |
+| `..._last_week_consumption` | Last Week's Consumption | Total energy consumed during the entire previous week. |
+| `..._monthly_consumption` | Current Month Consumption | Total energy consumed from the start of the current month until yesterday. |
+| `..._previous_month_consumption` | Previous Month's Consumption | Total energy consumed during the entire previous month. |
+| `..._yesterdays_production` | Yesterday's Production | Total energy produced yesterday. |
+| `..._current_week_production` | Current Week Production | Total energy produced from the start of the current week until yesterday. |
+| `..._last_week_production` | Last Week's Production | Total energy produced during the entire previous week. |
+| `..._monthly_production` | Current Month Production | Total energy produced from the start of the current month until yesterday. |
+| `..._previous_month_production` | Previous Month's Production | Total energy produced during the entire previous month. |
+| `..._yesterdays_exported_energy` | Yesterday's Exported Energy | Total energy exported to the grid yesterday. |
+| `..._last_week_exported_energy` | Last Week's Exported Energy | Total energy exported during the previous week. |
+| `..._monthly_exported` | Current Month's Exported Energy | Total energy exported from the start of the current month until yesterday. |
+| `..._last_month_exported_energy` | Last Month's Exported Energy | Total energy exported during the entire previous month. |
+| `..._yesterdays_self_consumed_energy` | Yesterday's Self-Consumed Energy | Total self-consumed energy yesterday. |
+| `..._last_week_self_consumed_energy` | Last Week's Self-Consumed Energy | Total self-consumed energy during the previous week. |
+| `..._monthly_self_consumed` | Current Month's Self-Consumed Energy | Total self-consumed energy from the start of the current month until yesterday. |
+| `..._last_month_self_consumed_energy`| Last Month's Self-Consumed Energy | Total self-consumed energy during the entire previous month. |
 
-| Sensor Name | Description |
-|-------------|------------|
-| ..._yesterdays_exported_energy | Total energy exported to the grid on the previous day. |
-| ..._yesterdays_self_consumed_energy | Total self-consumed energy from your production on the previous day. |
-| ..._last_weeks_exported_energy | Total energy exported to the grid during the previous week. |
-| ..._last_weeks_self_consumed_energy | Total self-consumed energy during the previous week. |
-| ..._last_months_exported_energy | Total energy exported to the grid during the previous month. |
-| ..._last_months_self_consumed_energy | Total self-consumed energy during the previous month. |
+### Gas Sensors
+| Entity ID Suffix | UI Name | Description |
+|------------------|---------|-------------|
+| `..._gas_yesterdays_consumption` | GAS - Yesterday's Consumption | Total gas consumed yesterday (in kWh). |
+| `..._gas_last_week_consumption` | GAS - Last Week's Consumption | Total gas consumed during the previous week (in kWh). |
+| `..._gas_monthly_consumption` | GAS - Current Month's Consumption | Total gas consumed from the start of the current month until yesterday (in kWh). |
+| `..._gas_last_month_consumption` | GAS - Last Month's Consumption | Total gas consumed during the entire previous month (in kWh). |
 
-### Direct OBIS Code Sensors
-These provide the raw data used for calculations. Availability depends on your meter.
+### Peak Power Sensors
+These sensors show the highest 15-minute average power reading from the previous day. The timestamp of the peak is available as a state attribute.
 
-| Sensor Name | OBIS Code | Description |
-|-------------|----------|------------|
-| ..._measured_active_consumption | 1-1:1.29.0 | Raw power consumption data. |
-| ..._measured_active_production | 1-1:2.29.0 | Raw power generation data. |
-| ..._remaining_consumption_after_sharing | 1-65:1.29.9 | Grid Import: Total energy imported from the grid. |
-| ..._remaining_production_after_sharing | 1-65:2.29.9 | Grid Export: Total energy exported to the grid. |
-| Other OBIS codes | various | Reactive power, gas, and energy community sharing data. |
+| Entity ID Suffix | UI Name | Unit |
+|------------------|---------|------|
+| `..._peak_active_consumption` | Yesterday's Peak Active Consumption | kW |
+| `..._peak_reactive_consumption` | Yesterday's Peak Reactive Consumption | kVAR |
+| `..._peak_active_production` | Yesterday's Peak Active Production | kW |
+| `..._peak_reactive_production` | Yesterday's Peak Reactive Production | kVAR |
+| `..._gas_peak_consumed_energy` | GAS - Yesterday's Peak Consumed Energy | kWh |
+| `..._gas_peak_consumed_volume` | GAS - Yesterday's Peak Consumed Volume | m³ |
+| `..._gas_peak_consumed_standard_volume` | GAS - Yesterday's Peak Consumed Standard Volume | Nm³ |
+
+### Energy Community & Sharing Sensors
+These sensors provide detailed data about your participation in an energy community.
+
+**Peak values from yesterday:**
+- Yesterday's Peak Consumption Covered (L1-L4)
+- Yesterday's Peak Remaining Consumption
+- Yesterday's Peak Production Shared (L1-L4)
+- Yesterday's Peak Remaining Production
+
+**Aggregated totals from last month (in kWh):**
+- Last Month's Consumption Covered (L1-L4)
+- Last Month's Remaining Consumption
+- Last Month's Production Shared (L1-L4)
+- Last Month's Remaining Production
 
 ---
 

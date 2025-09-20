@@ -50,8 +50,8 @@ async def async_setup_entry(
         ("c_06_last_week_consumption", "03 - Last Week's Consumption", "energy"),
         ("c_07_monthly_consumption", "04 - Current Month Consumption", "energy"),
         ("c_08_previous_month_consumption", "05 - Previous Month's Consumption", "energy"),
-        ("1-1:1.29.0", "06 - Measured Active Consumption", "obis"),
-        ("1-1:3.29.0", "07 - Measured Reactive Consumption", "obis"),
+        ("1-1:1.29.0", "06 - Yesterday's Peak Active Consumption", "obis"),
+        ("1-1:3.29.0", "07 - Yesterday's Peak Reactive Consumption", "obis"),
 
         # --- Energy Production ---
         ("p_04_yesterday_production", "08 - Yesterday's Production", "energy"),
@@ -59,36 +59,51 @@ async def async_setup_entry(
         ("p_06_last_week_production", "10 - Last Week's Production", "energy"),
         ("p_07_monthly_production", "11 - Current Month Production", "energy"),
         ("p_08_previous_month_production", "12 - Previous Month's Production", "energy"),
-        ("1-1:2.29.0", "13 - Measured Active Production", "obis"),
-        ("1-1:4.29.0", "14 - Measured Reactive Production", "obis"),
+        ("1-1:2.29.0", "13 - Yesterday's Peak Active Production", "obis"),
+        ("1-1:4.29.0", "14 - Yesterday's Peak Reactive Production", "obis"),
 
         # --- Gas Consumption ---
         ("g_01_yesterday_consumption", "15 - GAS - Yesterday's Consumption", "energy"),
         ("g_02_last_week_consumption", "16 - GAS - Last Week's Consumption", "energy"),
-        ("g_03_last_month_consumption", "17 - GAS - Last Month's Consumption", "energy"),
-        ("7-20:99.33.17", "18 - GAS - Measured Consumed Energy", "obis"),
-        ("7-1:99.23.15", "19 - GAS - Measured Consumed Volume", "obis"),
-        ("7-1:99.23.17", "20 - GAS - Measured Consumed Standard Volume", "obis"),
+        ("g_04_monthly_consumption", "17 - GAS - Current Month's Consumption", "energy"),
+        ("g_03_last_month_consumption", "18 - GAS - Last Month's Consumption", "energy"),
+        ("7-20:99.33.17", "19 - GAS - Yesterday's Peak Consumed Energy", "obis"),
+        ("7-1:99.23.15", "20 - GAS - Yesterday's Peak Consumed Volume", "obis"),
+        ("7-1:99.23.17", "21 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
 
         # --- Energy Sharing & Community ---
-        ("1-65:1.29.1", "21 - Consumption Covered by Production (Layer 1)", "obis"),
-        ("1-65:1.29.3", "22 - Consumption Covered by Production (Layer 2)", "obis"),
-        ("1-65:1.29.2", "23 - Consumption Covered by Production (Layer 3)", "obis"),
-        ("1-65:1.29.4", "24 - Consumption Covered by Production (Layer 4)", "obis"),
-        ("1-65:1.29.9", "25 - Remaining Consumption After Sharing", "obis"),
-        ("1-65:2.29.1", "26 - Production Shared (Layer 1)", "obis"),
-        ("1-65:2.29.3", "27 - Production Shared (Layer 2)", "obis"),
-        ("1-65:2.29.2", "28 - Production Shared (Layer 3)", "obis"),
-        ("1-65:2.29.4", "29 - Production Shared (Layer 4)", "obis"),
-        ("1-65:2.29.9", "30 - Remaining Production After Sharing", "obis"),
+        ("1-65:1.29.1", "22 - Yesterday's Peak Consumption Covered (L1)", "obis"),
+        ("1-65:1.29.3", "23 - Yesterday's Peak Consumption Covered (L2)", "obis"),
+        ("1-65:1.29.2", "24 - Yesterday's Peak Consumption Covered (L3)", "obis"),
+        ("1-65:1.29.4", "25 - Yesterday's Peak Consumption Covered (L4)", "obis"),
+        ("1-65:1.29.9", "26 - Yesterday's Peak Remaining Consumption", "obis"),
+        ("1-65:2.29.1", "27 - Yesterday's Peak Production Shared (L1)", "obis"),
+        ("1-65:2.29.3", "28 - Yesterday's Peak Production Shared (L2)", "obis"),
+        ("1-65:2.29.2", "29 - Yesterday's Peak Production Shared (L3)", "obis"),
+        ("1-65:2.29.4", "30 - Yesterday's Peak Production Shared (L4)", "obis"),
+        ("1-65:2.29.9", "31 - Yesterday's Peak Remaining Production", "obis"),
 
         # --- Aggregated Production Metrics ---
-        ("p_09_yesterday_exported", "31 - Yesterday's Exported Energy", "energy"),
-        ("p_12_yesterday_self_consumed", "32 - Yesterday's Self-Consumed Energy", "energy"),
-        ("p_10_last_week_exported", "33 - Last Week's Exported Energy", "energy"),
-        ("p_13_last_week_self_consumed", "34 - Last Week's Self-Consumed Energy", "energy"),
-        ("p_11_last_month_exported", "35 - Last Month's Exported Energy", "energy"),
-        ("p_14_last_month_self_consumed", "36 - Last Month's Self-Consumed Energy", "energy"),
+        ("p_09_yesterday_exported", "32 - Yesterday's Exported Energy", "energy"),
+        ("p_12_yesterday_self_consumed", "33 - Yesterday's Self-Consumed Energy", "energy"),
+        ("p_10_last_week_exported", "34 - Last Week's Exported Energy", "energy"),
+        ("p_13_last_week_self_consumed", "35 - Last Week's Self-Consumed Energy", "energy"),
+        ("p_15_monthly_exported", "36 - Current Month's Exported Energy", "energy"),
+        ("p_16_monthly_self_consumed", "37 - Current Month's Self-Consumed Energy", "energy"),
+        ("p_11_last_month_exported", "38 - Last Month's Exported Energy", "energy"),
+        ("p_14_last_month_self_consumed", "39 - Last Month's Self-Consumed Energy", "energy"),
+
+        # --- Last Month's Energy Sharing ---
+        ("s_c_l1_last_month", "40 - Last Month's Consumption Covered (L1)", "energy"),
+        ("s_c_l2_last_month", "41 - Last Month's Consumption Covered (L2)", "energy"),
+        ("s_c_l3_last_month", "42 - Last Month's Consumption Covered (L3)", "energy"),
+        ("s_c_l4_last_month", "43 - Last Month's Consumption Covered (L4)", "energy"),
+        ("s_c_rem_last_month", "44 - Last Month's Remaining Consumption", "energy"),
+        ("s_p_l1_last_month", "45 - Last Month's Production Shared (L1)", "energy"),
+        ("s_p_l2_last_month", "46 - Last Month's Production Shared (L2)", "energy"),
+        ("s_p_l3_last_month", "47 - Last Month's Production Shared (L3)", "energy"),
+        ("s_p_l4_last_month", "48 - Last Month's Production Shared (L4)", "energy"),
+        ("s_p_rem_last_month", "49 - Last Month's Remaining Production", "energy"),
     ]
 
     sensors = []
@@ -116,7 +131,6 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
     """Representation of a Leneda sensor."""
 
     _attr_has_entity_name = True
-    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
@@ -136,7 +150,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         if self._obis_code in GAS_OBIS_CODES:
             # This is a gas sensor, use gas icon and device class
             self._attr_device_class = SensorDeviceClass.GAS
-            self._attr_icon = "mdi:gas-cylinder"
+            self._attr_icon = "mdi:fire"
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         else:
             # Default icon for non-gas sensors
@@ -242,9 +256,9 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
     def extra_state_attributes(self) -> dict[str, str] | None:
         """Return the state attributes."""
         if self.coordinator.data:
-            data_timestamp = self.coordinator.data.get(f"{self._obis_code}_data_timestamp")
-            if data_timestamp:
-                return {"data_timestamp": data_timestamp}
+            peak_timestamp = self.coordinator.data.get(f"{self._obis_code}_peak_timestamp")
+            if peak_timestamp:
+                return {"peak_timestamp": peak_timestamp}
         return None
 
 
