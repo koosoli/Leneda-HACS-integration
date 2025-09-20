@@ -119,6 +119,7 @@ async def async_setup_entry(
             ("yesterdays_power_usage_over_reference", "50 - Yesterday's Power Usage Over Reference", "energy")
         )
 
+    # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []
     _LOGGER.debug("Creating sensors in the following order:")
     for key, name, sensor_type in all_sensors_ordered:
@@ -156,7 +157,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         super().__init__(coordinator)
         self._obis_code = obis_code
         self._attr_name = details["name"]
-        self._attr_unique_id = f"{metering_point_id}_{obis_code}_v2"
+        self._attr_unique_id = f"{metering_point_id}_{obis_code}_v3"
         self._attr_native_unit_of_measurement = details["unit"]
 
         # Set device class, state class, and icon based on OBIS code and unit
@@ -293,7 +294,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         super().__init__(coordinator)
         self._key = sensor_key
         self._attr_name = name
-        self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v2"
+        self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v3"
 
         # Set device class and icon based on sensor type (gas or energy)
         if sensor_key.startswith("g_"):
