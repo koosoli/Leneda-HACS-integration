@@ -247,17 +247,25 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
                         if series and len(series) > 0:
+                            item = None
                             if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly - get latest hour
-                                data[key] = series[-1].get("value", 0.0) if series else 0.0
-                                _LOGGER.debug(f"Processed hourly data for {key}: {data[key]}")
+                                item = series[-1]
                             else: # Other aggregated - get first (and usually only) value
-                                data[key] = series[0].get("value", 0.0) if series else 0.0
+                                item = series[0]
+
+                            if item and item.get("value") is not None:
+                                data[key] = item["value"]
                                 _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
+                            else:
+                                # Keep previous value if item is invalid or value is missing
+                                if key not in data or data[key] is None:
+                                    data[key] = 0.0
+                                _LOGGER.debug(f"Aggregated data for {key} has no value, keeping previous value: {data.get(key)}")
                         else:
                             # Keep previous value if available, otherwise set to 0.0 for energy sensors
                             if key not in data or data[key] is None:
                                 data[key] = 0.0
-                            _LOGGER.debug(f"No aggregated time series for {key}, keeping previous value: {data[key]}")
+                            _LOGGER.debug(f"No aggregated time series for {key}, keeping previous value: {data.get(key)}")
                     elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
                         # Network errors: preserve previous values
                         _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
