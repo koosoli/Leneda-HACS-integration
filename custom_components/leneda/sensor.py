@@ -44,7 +44,7 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up Leneda sensors for metering point %s", metering_point_id)
 
     all_sensors_ordered = [
-        # Historical Consumption (Leneda provides data from previous day onwards)
+        # --- Energy Consumption ---
         ("c_04_yesterday_consumption", "01 - Yesterday's Consumption", "energy"),
         ("c_05_weekly_consumption", "02 - Current Week Consumption", "energy"),
         ("c_06_last_week_consumption", "03 - Last Week's Consumption", "energy"),
@@ -52,34 +52,43 @@ async def async_setup_entry(
         ("c_08_previous_month_consumption", "05 - Previous Month's Consumption", "energy"),
         ("1-1:1.29.0", "06 - Measured Active Consumption", "obis"),
         ("1-1:3.29.0", "07 - Measured Reactive Consumption", "obis"),
-        ("7-20:99.33.17", "08 - GAS - Measured Consumed Energy", "obis"),
-        ("7-1:99.23.15", "09 - GAS - Measured Consumed Volume", "obis"),
-        ("7-1:99.23.17", "10 - GAS - Measured Consumed Standard Volume", "obis"),
-        ("1-65:1.29.1", "11 - Consumption Covered by Production (Layer 1)", "obis"),
-        ("1-65:1.29.3", "12 - Consumption Covered by Production (Layer 2)", "obis"),
-        ("1-65:1.29.2", "13 - Consumption Covered by Production (Layer 3)", "obis"),
-        ("1-65:1.29.4", "14 - Consumption Covered by Production (Layer 4)", "obis"),
-        ("1-65:1.29.9", "15 - Remaining Consumption After Sharing", "obis"),
-        # Historical Production
-        ("p_04_yesterday_production", "16 - Yesterday's Production", "energy"),
-        ("p_05_weekly_production", "17 - Current Week Production", "energy"),
-        ("p_06_last_week_production", "18 - Last Week's Production", "energy"),
-        ("p_07_monthly_production", "19 - Current Month Production", "energy"),
-        ("p_08_previous_month_production", "20 - Previous Month's Production", "energy"),
-        ("1-1:2.29.0", "21 - Measured Active Production", "obis"),
-        ("1-1:4.29.0", "22 - Measured Reactive Production", "obis"),
-        ("1-65:2.29.1", "23 - Production Shared (Layer 1)", "obis"),
-        ("1-65:2.29.3", "24 - Production Shared (Layer 2)", "obis"),
-        ("1-65:2.29.2", "25 - Production Shared (Layer 3)", "obis"),
-        ("1-65:2.29.4", "26 - Production Shared (Layer 4)", "obis"),
-        ("1-65:2.29.9", "27 - Remaining Production After Sharing", "obis"),
-        # Custom aggregated sensors for export and self-consumption
-        ("p_09_yesterday_exported", "28 - Yesterday's Exported Energy", "energy"),
-        ("p_12_yesterday_self_consumed", "29 - Yesterday's Self-Consumed Energy", "energy"),
-        ("p_10_last_week_exported", "30 - Last Week's Exported Energy", "energy"),
-        ("p_13_last_week_self_consumed", "31 - Last Week's Self-Consumed Energy", "energy"),
-        ("p_11_last_month_exported", "32 - Last Month's Exported Energy", "energy"),
-        ("p_14_last_month_self_consumed", "33 - Last Month's Self-Consumed Energy", "energy"),
+
+        # --- Energy Production ---
+        ("p_04_yesterday_production", "08 - Yesterday's Production", "energy"),
+        ("p_05_weekly_production", "09 - Current Week Production", "energy"),
+        ("p_06_last_week_production", "10 - Last Week's Production", "energy"),
+        ("p_07_monthly_production", "11 - Current Month Production", "energy"),
+        ("p_08_previous_month_production", "12 - Previous Month's Production", "energy"),
+        ("1-1:2.29.0", "13 - Measured Active Production", "obis"),
+        ("1-1:4.29.0", "14 - Measured Reactive Production", "obis"),
+
+        # --- Gas Consumption ---
+        ("g_01_yesterday_consumption", "15 - GAS - Yesterday's Consumption", "energy"),
+        ("g_02_last_week_consumption", "16 - GAS - Last Week's Consumption", "energy"),
+        ("g_03_last_month_consumption", "17 - GAS - Last Month's Consumption", "energy"),
+        ("7-20:99.33.17", "18 - GAS - Measured Consumed Energy", "obis"),
+        ("7-1:99.23.15", "19 - GAS - Measured Consumed Volume", "obis"),
+        ("7-1:99.23.17", "20 - GAS - Measured Consumed Standard Volume", "obis"),
+
+        # --- Energy Sharing & Community ---
+        ("1-65:1.29.1", "21 - Consumption Covered by Production (Layer 1)", "obis"),
+        ("1-65:1.29.3", "22 - Consumption Covered by Production (Layer 2)", "obis"),
+        ("1-65:1.29.2", "23 - Consumption Covered by Production (Layer 3)", "obis"),
+        ("1-65:1.29.4", "24 - Consumption Covered by Production (Layer 4)", "obis"),
+        ("1-65:1.29.9", "25 - Remaining Consumption After Sharing", "obis"),
+        ("1-65:2.29.1", "26 - Production Shared (Layer 1)", "obis"),
+        ("1-65:2.29.3", "27 - Production Shared (Layer 2)", "obis"),
+        ("1-65:2.29.2", "28 - Production Shared (Layer 3)", "obis"),
+        ("1-65:2.29.4", "29 - Production Shared (Layer 4)", "obis"),
+        ("1-65:2.29.9", "30 - Remaining Production After Sharing", "obis"),
+
+        # --- Aggregated Production Metrics ---
+        ("p_09_yesterday_exported", "31 - Yesterday's Exported Energy", "energy"),
+        ("p_12_yesterday_self_consumed", "32 - Yesterday's Self-Consumed Energy", "energy"),
+        ("p_10_last_week_exported", "33 - Last Week's Exported Energy", "energy"),
+        ("p_13_last_week_self_consumed", "34 - Last Week's Self-Consumed Energy", "energy"),
+        ("p_11_last_month_exported", "35 - Last Month's Exported Energy", "energy"),
+        ("p_14_last_month_self_consumed", "36 - Last Month's Self-Consumed Energy", "energy"),
     ]
 
     sensors = []
@@ -107,6 +116,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
     """Representation of a Leneda sensor."""
 
     _attr_has_entity_name = True
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
@@ -242,10 +252,8 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
     """Representation of a Leneda energy sensor for aggregated data."""
 
     _attr_has_entity_name = True
-    _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = "kWh"
-    _attr_icon = "mdi:chart-bar"
 
     def __init__(
         self,
@@ -259,6 +267,14 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         self._key = sensor_key
         self._attr_name = name
         self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v2"
+
+        # Set device class and icon based on sensor type (gas or energy)
+        if sensor_key.startswith("g_"):
+            self._attr_device_class = SensorDeviceClass.GAS
+            self._attr_icon = "mdi:fire"
+        else:
+            self._attr_device_class = SensorDeviceClass.ENERGY
+            self._attr_icon = "mdi:chart-bar"
 
         # Extract base metering point ID for device consolidation
         base_meter_id = self._get_base_meter_id(metering_point_id)
