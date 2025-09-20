@@ -68,6 +68,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
                 EXPORT_CODE = "1-65:2.29.9"
+                GAS_OBIS_CODE = "7-20:99.33.17"
 
                 # Tasks for OBIS code data (historical data from yesterday)
                 _LOGGER.debug("Setting up tasks for OBIS code data...")
@@ -126,12 +127,28 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                 ]
                 
+                aggregated_tasks.extend([
+                    # Yesterday's Gas
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt
+                    ),
+                    # Last Week's Gas
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    # Previous Month's Gas
+                    self.api_client.async_get_aggregated_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
+                    ),
+                ])
+
                 aggregated_keys = [
                     "c_04_yesterday_consumption", "p_04_yesterday_production", "p_09_yesterday_exported",
                     "c_05_weekly_consumption", "p_05_weekly_production",
                     "c_06_last_week_consumption", "p_06_last_week_production", "p_10_last_week_exported",
                     "c_07_monthly_consumption", "p_07_monthly_production",
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
+                    "g_01_yesterday_consumption", "g_02_last_week_consumption", "g_03_last_month_consumption",
                 ]
 
                 _LOGGER.debug("Gathering all API tasks...")
