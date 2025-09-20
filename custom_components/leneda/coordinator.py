@@ -27,7 +27,7 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .api import LenedaApiClient
-from .const import DOMAIN, OBIS_CODES
+from .const import DOMAIN, OBIS_CODES, CONF_REFERENCE_POWER_ENTITY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
     """A coordinator to fetch data from the Leneda API."""
 
-    def __init__(self, hass: HomeAssistant, api_client: LenedaApiClient, metering_point_id: str) -> None:
+    def __init__(self, hass: HomeAssistant, api_client: LenedaApiClient, metering_point_id: str, entry: dict) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
@@ -45,6 +45,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.api_client = api_client
         self.metering_point_id = metering_point_id
+        self.reference_power_entity = entry.data.get(CONF_REFERENCE_POWER_ENTITY)
 
     async def _async_update_data(self) -> dict[str, float | None]:
         """Fetch data from the Leneda API concurrently."""
@@ -299,6 +300,33 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         data["p_14_last_month_self_consumed"] = round(prod_last_month - export_last_month, 2)
                 except (TypeError, ValueError) as e:
                     _LOGGER.error("Could not calculate self-consumption values: %s", e)
+
+                # Calculate power usage over reference
+                if self.reference_power_entity:
+                    try:
+                        ref_power_state = self.hass.states.get(self.reference_power_entity)
+                        if ref_power_state and ref_power_state.state not in ("unknown", "unavailable"):
+                            ref_power_kw = float(ref_power_state.state)
+
+                            # Find the result of the 15-min consumption data fetch
+                            consumption_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == CONSUMPTION_CODE), None)
+
+                            if isinstance(consumption_result, dict) and consumption_result.get("items"):
+                                total_overage_kwh = 0.0
+                                for item in consumption_result["items"]:
+                                    power_kw = float(item["value"])
+                                    if power_kw > ref_power_kw:
+                                        # Energy for a 15-minute interval = Power (kW) * 0.25 (h)
+                                        overage_energy = (power_kw - ref_power_kw) * 0.25
+                                        total_overage_kwh += overage_energy
+
+                                data["yesterdays_power_usage_over_reference"] = round(total_overage_kwh, 2)
+                                _LOGGER.debug(f"Calculated {total_overage_kwh:.2f} kWh over reference of {ref_power_kw} kW")
+                        else:
+                            _LOGGER.warning(f"Reference power entity {self.reference_power_entity} not found or unavailable.")
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.error(f"Could not calculate power usage over reference: {e}")
+
 
                 _LOGGER.debug("--- Leneda Data Update Finished ---")
                 _LOGGER.debug("Final coordinated data: %s", data)
