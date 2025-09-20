@@ -106,6 +106,12 @@ async def async_setup_entry(
         ("s_p_rem_last_month", "49 - Last Month's Remaining Production", "energy"),
     ]
 
+    # Conditionally add the power usage over reference sensor
+    if coordinator.reference_power_entity:
+        all_sensors_ordered.append(
+            ("yesterdays_power_usage_over_reference", "50 - Yesterday's Power Usage Over Reference", "energy")
+        )
+
     sensors = []
     _LOGGER.debug("Creating sensors in the following order:")
     for key, name, sensor_type in all_sensors_ordered:

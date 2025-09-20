@@ -3,12 +3,14 @@ import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import selector as sel
 
 from .api import InvalidAuth, LenedaApiClient, LenedaApiError, NoDataError
 from .const import (
     CONF_API_KEY,
     CONF_ENERGY_ID,
     CONF_METERING_POINT_ID,
+    CONF_REFERENCE_POWER_ENTITY,
     DOMAIN,
 )
 
@@ -49,6 +51,9 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_METERING_POINT_ID): str,
                     vol.Required(CONF_API_KEY): str,
                     vol.Required(CONF_ENERGY_ID): str,
+                    vol.Optional(CONF_REFERENCE_POWER_ENTITY): sel.EntitySelector(
+                        sel.EntitySelectorConfig(domain="input_number"),
+                    ),
                 }
             ),
             errors=errors,

@@ -96,6 +96,37 @@ Configure the Energy Dashboard:
 - **Solar Panels**:
   - Solar production: `sensor.daily_solar_production`
 
+### Tracking Power Usage Over a Reference Limit
+For users on contracts with a demand charge (e.g., you pay extra if you exceed 12 kW of power), this integration can calculate the total energy consumed above that limit.
+
+**Step 1: Create an `input_number` Helper**
+This helper will store your reference power value.
+1. Go to **Settings → Devices & Services → Helpers**.
+2. Click **+ Create Helper** and choose **Number**.
+3. Name it (e.g., "Reference Power Limit").
+4. Set the **Unit of measurement** to **kW**.
+5. Set the **Mode** to **Box** so you can type a value.
+6. Click **Submit**. Note the entity ID (e.g., `input_number.reference_power_limit`).
+
+**Step 2: Configure the Integration**
+When you add or reconfigure the Leneda integration, you will see an optional field for "Reference Power Entity". Select the `input_number` helper you just created.
+
+**Step 3: Use the New Sensor**
+The integration will create a new sensor:
+- `sensor.leneda_..._yesterdays_power_usage_over_reference`
+
+This sensor shows the total energy (in kWh) consumed above your reference value on the previous day.
+
+**Step 4 (Optional): Track Monthly Overage**
+To get a running total for the month, create a `utility_meter` helper:
+````yaml
+# configuration.yaml
+utility_meter:
+  monthly_power_overage:
+    source: sensor.leneda_...XXXX..._yesterdays_power_usage_over_reference
+    cycle: monthly
+````
+
 ---
 
 ### Energy Billing & Auto-Consumption Calculations
@@ -244,6 +275,13 @@ These sensors provide detailed data about your participation in an energy commun
 - Last Month's Remaining Consumption
 - Last Month's Production Shared (L1-L4)
 - Last Month's Remaining Production
+
+### Power Usage Over Reference
+This sensor is only created if you configure the feature.
+
+| Entity ID Suffix | UI Name | Description |
+|------------------|---------|-------------|
+| `..._yesterdays_power_usage_over_reference` | Yesterday's Power Usage Over Reference | Total energy (kWh) consumed above the configured reference power during the previous day. |
 
 ---
 
