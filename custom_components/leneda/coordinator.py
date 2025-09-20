@@ -27,7 +27,12 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .api import LenedaApiClient
-from .const import DOMAIN, OBIS_CODES, CONF_REFERENCE_POWER_ENTITY
+from .const import (
+    DOMAIN,
+    OBIS_CODES,
+    CONF_REFERENCE_POWER_ENTITY,
+    CONF_REFERENCE_POWER_STATIC,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,7 +50,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.api_client = api_client
         self.metering_point_id = metering_point_id
-        self.reference_power_entity = entry.data.get(CONF_REFERENCE_POWER_ENTITY)
+        self.entry = entry
 
     async def _async_update_data(self) -> dict[str, float | None]:
         """Fetch data from the Leneda API concurrently."""
@@ -302,12 +307,22 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.error("Could not calculate self-consumption values: %s", e)
 
                 # Calculate power usage over reference
-                if self.reference_power_entity:
-                    try:
-                        ref_power_state = self.hass.states.get(self.reference_power_entity)
-                        if ref_power_state and ref_power_state.state not in ("unknown", "unavailable"):
-                            ref_power_kw = float(ref_power_state.state)
+                ref_power_entity = self.entry.data.get(CONF_REFERENCE_POWER_ENTITY)
+                ref_power_static = self.entry.data.get(CONF_REFERENCE_POWER_STATIC)
 
+                if ref_power_entity or ref_power_static is not None:
+                    try:
+                        ref_power_kw = None
+                        if ref_power_entity:
+                            ref_power_state = self.hass.states.get(ref_power_entity)
+                            if ref_power_state and ref_power_state.state not in ("unknown", "unavailable"):
+                                ref_power_kw = float(ref_power_state.state)
+                            else:
+                                _LOGGER.warning(f"Reference power entity {ref_power_entity} not found or unavailable.")
+                        elif ref_power_static is not None:
+                            ref_power_kw = float(ref_power_static)
+
+                        if ref_power_kw is not None:
                             # Find the result of the 15-min consumption data fetch
                             consumption_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == CONSUMPTION_CODE), None)
 
@@ -322,8 +337,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                                 data["yesterdays_power_usage_over_reference"] = round(total_overage_kwh, 2)
                                 _LOGGER.debug(f"Calculated {total_overage_kwh:.2f} kWh over reference of {ref_power_kw} kW")
-                        else:
-                            _LOGGER.warning(f"Reference power entity {self.reference_power_entity} not found or unavailable.")
                     except (ValueError, TypeError) as e:
                         _LOGGER.error(f"Could not calculate power usage over reference: {e}")
 
