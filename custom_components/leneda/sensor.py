@@ -92,13 +92,13 @@ async def async_setup_entry(
 
         # --- Aggregated Production Metrics ---
         ("p_09_yesterday_exported", "32 - Yesterday's Exported Energy", "energy"),
-        ("p_12_yesterday_self_consumed", "33 - Yesterday's Self-Consumed Energy", "energy"),
+        ("p_12_yesterday_self_consumed", "33 - Yesterday's Locally Used Energy", "energy"),
         ("p_10_last_week_exported", "34 - Last Week's Exported Energy", "energy"),
-        ("p_13_last_week_self_consumed", "35 - Last Week's Self-Consumed Energy", "energy"),
+        ("p_13_last_week_self_consumed", "35 - Last Week's Locally Used Energy", "energy"),
         ("p_15_monthly_exported", "36 - Current Month's Exported Energy", "energy"),
-        ("p_16_monthly_self_consumed", "37 - Current Month's Self-Consumed Energy", "energy"),
+        ("p_16_monthly_self_consumed", "37 - Current Month's Locally Used Energy", "energy"),
         ("p_11_last_month_exported", "38 - Last Month's Exported Energy", "energy"),
-        ("p_14_last_month_self_consumed", "39 - Last Month's Self-Consumed Energy", "energy"),
+        ("p_14_last_month_self_consumed", "39 - Last Month's Locally Used Energy", "energy"),
 
         # --- Last Month's Energy Sharing ---
         ("s_c_l1_last_month", "40 - Last Month's Consumption Covered (L1)", "energy"),
@@ -188,7 +188,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, base_meter_id)},
-            name=f"Leneda (...{base_meter_id[-4:]})",
+            name=f"Leneda (...{base_meter_id[-7:]})",
             manufacturer="Leneda",
             model="Smart Meter",
             sw_version=coordinator.version,
@@ -308,7 +308,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, base_meter_id)},
-            name=f"Leneda (...{base_meter_id[-4:]})",
+            name=f"Leneda (...{base_meter_id[-7:]})",
             manufacturer="Leneda",
             model="Smart Meter",
             sw_version=coordinator.version,
