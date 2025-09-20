@@ -99,7 +99,7 @@ Configure the Energy Dashboard:
 ### Tracking Power Usage Over a Reference Limit
 For users on contracts with a demand charge (e.g., you pay extra if you exceed 12 kW of power), this integration can calculate the total energy consumed above that limit.
 
-**Step 1: Create an `input_number` Helper**
+**Step 1: Create an `input_number` Helper**  
 This helper will store your reference power value.
 1. Go to **Settings → Devices & Services → Helpers**.
 2. Click **+ Create Helper** and choose **Number**.
@@ -108,86 +108,149 @@ This helper will store your reference power value.
 5. Set the **Mode** to **Box** so you can type a value.
 6. Click **Submit**. Note the entity ID (e.g., `input_number.reference_power_limit`).
 
-**Step 2: Configure the Integration**
+**Step 2: Configure the Integration**  
 When you add or reconfigure the Leneda integration, you will see an optional field for "Reference Power Entity". Select the `input_number` helper you just created.
 
-**Step 3: Use the New Sensor**
-The integration will create a new sensor:
+**Step 3: Use the New Sensor**  
+The integration will create a new sensor:  
 - `sensor.leneda_..._yesterdays_power_usage_over_reference`
 
 This sensor shows the total energy (in kWh) consumed above your reference value on the previous day.
 
-**Step 4 (Optional): Track Monthly Overage**
-To get a running total for the month, create a `utility_meter` helper:
+**Step 4 (Optional): Track Monthly and Last Month's Overage**  
+To get a running total for the current month and a sensor for the previous month, you can add the following helpers to your `configuration.yaml`:
+
 ````yaml
 # configuration.yaml
 utility_meter:
   monthly_power_overage:
     source: sensor.leneda_...XXXX..._yesterdays_power_usage_over_reference
+    name: "Monthly Power Overage"
     cycle: monthly
+
+template:
+  - sensor:
+      - name: "Last Month Power Overage"
+        unique_id: last_month_power_overage
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state: >
+          {{ state_attr('sensor.monthly_power_overage', 'last_period') | float(0) }}
 ````
+
+This creates two new sensors:
+- `sensor.monthly_power_overage`: Tracks the overage for the current month and resets on the 1st.
+- `sensor.last_month_power_overage`: Shows the total overage from the previous full month.
 
 ---
 
-### Energy Billing & Auto-Consumption Calculations
+### Advanced Example: Replicating Your Utility Bill
+The following is a real-world example of how you can combine this integration's sensors with Home Assistant helpers to create a detailed, accurate calculation of your monthly electricity bill, including all taxes and fees.
 
-> **Note:** The integration now provides built-in sensors for exported and self-consumed energy.  
-> The template examples below are for advanced/custom calculations.
+#### Step 1: Create Utility Meter Helpers
+First, create `utility_meter` helpers to track the key monthly kWh values. Add the following to your `configuration.yaml`. Remember to replace `...` with your meter's ID.
+```yaml
+# configuration.yaml
+utility_meter:
+  # Tracks total grid import for the current month
+  monthly_grid_import_kwh:
+    source: sensor.leneda_..._yesterdays_consumption
+    name: "Monthly Grid Import kWh"
+    cycle: monthly
 
-**Key Built-in Sensors:**
-- `sensor.leneda_..._yesterdays_self_consumed_energy`
-- `sensor.leneda_..._yesterdays_exported_energy`
-- `sensor.leneda_..._last_weeks_self_consumed_energy`
-- and more!
+  # Tracks power usage over the reference limit for the current month
+  monthly_power_exceedance_kwh:
+    source: sensor.leneda_..._yesterdays_power_usage_over_reference
+    name: "Monthly Power Exceedance kWh"
+    cycle: monthly
+```
 
-#### Advanced Calculations (Template Examples)
+#### Step 2: Create Template Sensors for Cost Calculation
+Now, add `template` sensors that use the `utility_meter` helpers to calculate the final costs. This example uses real rates from a 2024 Creos invoice and calculates the final cost for both the current running month and the previous full month.
 
-If you have a separate meter for your solar inverter's own consumption, you can create more detailed template sensors.  
-*(replace `...HOUSE...` and `...INVERTER...` with the appropriate meter IDs)*
-
-````yaml
+```yaml
 # configuration.yaml
 template:
   - sensor:
-      # Total consumption you pay for (House + Inverter)
-      - name: "Total Energy Consumption Yesterday"
-        unique_id: total_energy_consumption_yesterday
+      # Creates a sensor for last month's total grid import
+      - name: "Last Month Grid Import kWh"
+        unique_id: last_month_grid_import_kwh
         unit_of_measurement: "kWh"
+        device_class: energy
         state: >
-          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
-          {% set inverter = states('sensor.leneda_...INVERTER..._yesterdays_consumption') | float(0) %}
-          {{ (house + inverter) | round(2) }}
+          {{ state_attr('sensor.monthly_grid_import_kwh', 'last_period') | float(0) }}
 
-      # Final Grid Import after solar offset
-      - name: "Grid Import Yesterday"
-        unique_id: grid_import_yesterday
+      # Creates a sensor for last month's total power exceedance
+      - name: "Last Month Power Exceedance kWh"
+        unique_id: last_month_power_exceedance_kwh
         unit_of_measurement: "kWh"
+        device_class: energy
         state: >
-          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
-          {% set inverter = states('sensor.leneda_...INVERTER..._yesterdays_consumption') | float(0) %}
-          {% set production = states('sensor.leneda_...INVERTER..._yesterdays_production') | float(0) %}
-          {{ max(0, (house + inverter) - production) | round(2) }}
+          {{ state_attr('sensor.monthly_power_exceedance_kwh', 'last_period') | float(0) }}
 
-      # Final Grid Export after self-consumption
-      - name: "Grid Export Yesterday"
-        unique_id: grid_export_yesterday
-        unit_of_measurement: "kWh"
-        state: >
-          {% set house = states('sensor.leneda_...HOUSE..._yesterdays_consumption') | float(0) %}
-          {% set production = states('sensor.leneda_...INVERTER..._yesterdays_production') | float(0) %}
-          {{ max(0, production - house) | round(2) }}
-
-      # Estimated Energy Cost for Yesterday
-      - name: "Energy Cost Yesterday"
-        unique_id: energy_cost_yesterday
+      # --- SENSOR FOR LAST MONTH'S FINAL BILL ---
+      - name: "Electric Cost Last Month"
+        unique_id: electric_cost_last_month
         unit_of_measurement: "€"
         device_class: monetary
+        icon: mdi:invoice-text-check
         state: >
-          {% set import_kwh = states('sensor.grid_import_yesterday') | float(0) %}
-          {% set export_kwh = states('sensor.grid_export_yesterday') | float(0) %}
-          {% set import_rate = 0.30 %}  # €/kWh - adjust to your rate
-          {% set export_rate = 0.05 %}  # €/kWh - adjust to your feed-in tariff
-          {{ ((import_kwh * import_rate) - (export_kwh * export_rate)) | round(2) }}
+          {# --- DEFINE ALL RATES FROM YOUR INVOICE --- #}
+          {% set rate_energy_fixed = 1.50 %}         {# Redevance fixe (Énergie) #}
+          {% set rate_energy_variable = 0.1500 %}    {# Composante énergie (€/kWh) #}
+          {% set rate_network_metering = 5.90 %}     {# Comptage (Réseau) #}
+          {% set rate_network_power_ref = 19.27 %}   {# Redevance Fixe (Réseau, for your 7 kW reference power) #}
+          {% set rate_network_variable = 0.0759 %}   {# Redevance volumétrique (€/kWh) #}
+          {% set rate_exceedance = 0.1139 %}         {# Dépassement (> 7 kW) (€/kWh) #}
+          {% set rate_compensation_fund = -0.0376 %} {# Fonds de compensation (€/kWh) - this is a credit #}
+          {% set rate_electricity_tax = 0.0010 %}    {# Taxe électricité (€/kWh) #}
+          {% set rate_vat = 0.08 %}                  {# TVA (8%) #}
+
+          {# --- GET LAST MONTH'S USAGE DATA --- #}
+          {% set total_grid_import_kwh = states('sensor.last_month_grid_import_kwh') | float(0) %}
+          {% set total_exceedance_kwh = states('sensor.last_month_power_exceedance_kwh') | float(0) %}
+
+          {# --- CALCULATE COSTS, EXACTLY LIKE THE INVOICE --- #}
+          {% set fixed_costs = rate_energy_fixed + rate_network_metering + rate_network_power_ref %}
+          {% set variable_costs = total_grid_import_kwh * (rate_energy_variable + rate_network_variable + rate_compensation_fund + rate_electricity_tax) %}
+          {% set exceedance_costs = total_exceedance_kwh * rate_exceedance %}
+          {% set total_ht = fixed_costs + variable_costs + exceedance_costs %}
+          {% set vat_amount = total_ht * rate_vat %}
+          {% set final_cost = total_ht + vat_amount %}
+
+          {{ final_cost | round(2) }}
+
+      # --- SENSOR FOR CURRENT MONTH'S RUNNING BILL ---
+      - name: "Electric Cost Current Month"
+        unique_id: electric_cost_current_month
+        unit_of_measurement: "€"
+        device_class: monetary
+        icon: mdi:invoice-text-clock
+        state: >
+          {# --- DEFINE ALL RATES FROM YOUR INVOICE (same as above) --- #}
+          {% set rate_energy_fixed = 1.50 %}
+          {% set rate_energy_variable = 0.1500 %}
+          {% set rate_network_metering = 5.90 %}
+          {% set rate_network_power_ref = 19.27 %}
+          {% set rate_network_variable = 0.0759 %}
+          {% set rate_exceedance = 0.1139 %}
+          {% set rate_compensation_fund = -0.0376 %}
+          {% set rate_electricity_tax = 0.0010 %}
+          {% set rate_vat = 0.08 %}
+
+          {# --- GET CURRENT MONTH'S USAGE DATA (month-to-date) --- #}
+          {% set total_grid_import_kwh = states('sensor.monthly_grid_import_kwh') | float(0) %}
+          {% set total_exceedance_kwh = states('sensor.monthly_power_exceedance_kwh') | float(0) %}
+
+          {# --- CALCULATE COSTS, EXACTLY LIKE THE INVOICE --- #}
+          {% set fixed_costs = rate_energy_fixed + rate_network_metering + rate_network_power_ref %}
+          {% set variable_costs = total_grid_import_kwh * (rate_energy_variable + rate_network_variable + rate_compensation_fund + rate_electricity_tax) %}
+          {% set exceedance_costs = total_exceedance_kwh * rate_exceedance %}
+          {% set total_ht = fixed_costs + variable_costs + exceedance_costs %}
+          {% set vat_amount = total_ht * rate_vat %}
+          {% set final_cost = total_ht + vat_amount %}
+
+          {{ final_cost | round(2) }}
 ````
 
 ---
