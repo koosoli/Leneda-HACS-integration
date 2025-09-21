@@ -397,3 +397,8 @@ Contributions are welcome!
 4. Push to the branch:  
    `git push origin feature/AmazingFeature`
 5. Open a **Pull Request**.
+
+---
+## ✍️ Author
+This integration is authored and maintained by **[@koosoli](https://github.com/koosoli)** (Olivier Koos).
+---
