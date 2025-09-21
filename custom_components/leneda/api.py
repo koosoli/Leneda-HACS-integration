@@ -4,7 +4,6 @@ This module provides a client interface to interact with the Leneda REST API
 for retrieving energy consumption and production data from Luxembourg's smart meters.
 
 The API supports:
-- Real-time metering data (15-minute intervals)
 - Aggregated data over various time periods (hourly, daily, weekly, monthly)
 - Multiple OBIS codes for different types of measurements
 - Production sharing data for energy communities
