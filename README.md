@@ -111,7 +111,7 @@ This helper will store your reference power value.
 **Step 2: Configure the Integration**  
 When you add or reconfigure the Leneda integration, you will see an optional field for "Reference Power Entity". Select the `input_number` helper you just created.
 
-**Step 3: Use the New Sensors**
+**Step 3: Use the New Sensors**  
 The integration will create three sensors to track this overage automatically:
 - `sensor.leneda_..._yesterdays_power_usage_over_reference`
 - `sensor.leneda_..._current_month_power_usage_over_reference`
@@ -122,7 +122,7 @@ These sensors make it much easier to track and estimate costs related to demand 
 ---
 
 ### Advanced Example: Replicating Your Utility Bill
-The following is a real-world example of how you can combine this integration's sensors with Home Assistant helpers to create a detailed, accurate calculation of your monthly electricity bill. This example is based on a real 2024 Creos invoice and includes all taxes and fees.
+The following is a real-world example of how you can combine this integration's sensors with Home Assistant helpers to create a detailed, accurate calculation of your monthly electricity bill. This example is based on a real 2025 Creos invoice and includes all taxes and fees.
 
 > **Note**: This example is designed for a **multi-meter setup** (e.g., one meter for the house and another for a heat pump or inverter), which is a common scenario. If you only have one meter, you can simplify the templates by removing the second sensor from the calculations.
 
@@ -263,6 +263,31 @@ template:
 
           {{ final_cost | round(2) }}
 ````
+
+#### Step 3: Visualize Your Bill
+Once you have created the template sensors from the previous steps, you can create a clear and concise card for your dashboard using the standard **Entities Card**.
+
+```yaml
+type: entities
+title: Energy Bill Overview
+entities:
+  - type: section
+    label: Current Month (Estimate)
+  - entity: sensor.electric_cost_current_month
+    name: Estimated Bill
+  - entity: sensor.billable_grid_import_current_month
+    name: Grid Import
+  - entity: sensor.leneda_...METER_1..._current_month_power_usage_over_reference
+    name: Power Exceedance
+  - type: section
+    label: Last Month (Final)
+  - entity: sensor.electric_cost_last_month
+    name: Final Bill
+  - entity: sensor.billable_grid_import_last_month
+    name: Grid Import
+  - entity: sensor.leneda_...METER_1..._last_month_power_usage_over_reference
+    name: Power Exceedance
+```
 
 ---
 
