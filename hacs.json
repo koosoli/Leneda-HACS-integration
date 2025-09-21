@@ -3,5 +3,10 @@
   "country": "LU",
   "homeassistant": "2024.4.1",
   "render_readme": true,
-  "iot_class": "cloud_polling"
+  "authors": [               
+    {
+      "name": "Olivier Koos",
+      "url": "https://github.com/koosoli"
+    }
+  ]
 }
