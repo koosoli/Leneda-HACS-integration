@@ -1,10 +1,7 @@
 """DataUpdateCoordinator for the Leneda integration.
 
 This module contains the coordinator that handles data fetching from the Leneda API.
-It manages three types of data:
-1. Live power data (kW) - Current power consumption/production
-2. 15-minute interval data - For calculating recent energy consumption
-3. Aggregated data - Historical consumption/production over various periods
+
 
 The coordinator implements intelligent error handling:
 - Network timeouts preserve previous values instead of showing zero
