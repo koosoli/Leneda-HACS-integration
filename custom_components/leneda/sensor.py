@@ -1,10 +1,9 @@
 """Sensor platform for Leneda energy meters.
 
 This module creates sensors for the Leneda integration that display:
-1. Live power consumption/production data (kW/kVAR)
-2. Energy consumption/production over various time periods (kWh) 
-3. Gas consumption data (m³, Nm³, kWh) with GAS prefix
-4. Production sharing data for energy communities
+1. Energy consumption/production over various time periods (kWh) 
+2. Gas consumption data (m³, Nm³, kWh) with GAS prefix
+3. Production sharing data for energy communities
 
 Sensors are intelligently ordered by number and properly handle:
 - Missing data without showing as "Unavailable"
@@ -205,9 +204,9 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         to group sensors under the same device.
         
         Example: 
-        - Consumption: LU0000010983800000000000070590176
-        - Production:  LU0000010983800000000000770590176
-        - Base ID:     LU0000010983800000000000070590176 (using consumption as base)
+        - Consumption: LU0000010983800000000000070530176
+        - Production:  LU0000010983800000000000770530176
+        - Base ID:     LU0000010983800000000000070530176 (using consumption as base)
         
         Args:
             metering_point_id: Full metering point ID from Leneda
