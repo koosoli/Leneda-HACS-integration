@@ -204,9 +204,9 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         to group sensors under the same device.
         
         Example: 
-        - Consumption: LU0000010983800000000000070530176
-        - Production:  LU0000010983800000000000770530176
-        - Base ID:     LU0000010983800000000000070530176 (using consumption as base)
+        - Consumption: LUXXXXXXXXXXXXXXXXXXXXX079999999
+        - Production:  LUXXXXXXXXXXXXXXXXXXXXX779999999
+        - Base ID:     LUXXXXXXXXXXXXXXXXXXXXX079999999 (using consumption as base)
         
         Args:
             metering_point_id: Full metering point ID from Leneda
