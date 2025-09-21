@@ -218,10 +218,10 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         if len(metering_point_id) >= 34 and metering_point_id.startswith('LU'):
             # If this looks like a production meter (has '7' in position ~26), 
             # convert it to consumption meter format (with '0')
-            if '770590176' in metering_point_id:
+            if '779999999' in metering_point_id:
                 # Convert production ID to consumption ID for consolidation
-                return metering_point_id.replace('770590176', '070590176')
-            elif '070590176' in metering_point_id:
+                return metering_point_id.replace('779999999', '079999999')
+            elif '079999999' in metering_point_id:
                 # Already consumption ID, use as-is
                 return metering_point_id
         
@@ -323,9 +323,9 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         """
         # Use same logic as main sensor class
         if len(metering_point_id) >= 34 and metering_point_id.startswith('LU'):
-            if '770590176' in metering_point_id:
-                return metering_point_id.replace('770590176', '070590176')
-            elif '070590176' in metering_point_id:
+            if '779999999' in metering_point_id:
+                return metering_point_id.replace('779999999', '079999999')
+            elif '079999999' in metering_point_id:
                 return metering_point_id
         return metering_point_id
 
