@@ -111,36 +111,13 @@ This helper will store your reference power value.
 **Step 2: Configure the Integration**  
 When you add or reconfigure the Leneda integration, you will see an optional field for "Reference Power Entity". Select the `input_number` helper you just created.
 
-**Step 3: Use the New Sensor**  
-The integration will create a new sensor:  
+**Step 3: Use the New Sensors**
+The integration will create three sensors to track this overage automatically:
 - `sensor.leneda_..._yesterdays_power_usage_over_reference`
+- `sensor.leneda_..._current_month_power_usage_over_reference`
+- `sensor.leneda_..._last_month_power_usage_over_reference`
 
-This sensor shows the total energy (in kWh) consumed above your reference value on the previous day.
-
-**Step 4 (Optional): Track Monthly and Last Month's Overage**  
-To get a running total for the current month and a sensor for the previous month, you can add the following helpers to your `configuration.yaml`:
-
-````yaml
-# configuration.yaml
-utility_meter:
-  monthly_power_overage:
-    source: sensor.leneda_...XXXX..._yesterdays_power_usage_over_reference
-    name: "Monthly Power Overage"
-    cycle: monthly
-
-template:
-  - sensor:
-      - name: "Last Month Power Overage"
-        unique_id: last_month_power_overage
-        unit_of_measurement: "kWh"
-        device_class: energy
-        state: >
-          {{ state_attr('sensor.monthly_power_overage', 'last_period') | float(0) }}
-````
-
-This creates two new sensors:
-- `sensor.monthly_power_overage`: Tracks the overage for the current month and resets on the 1st.
-- `sensor.last_month_power_overage`: Shows the total overage from the previous full month.
+These sensors make it much easier to track and estimate costs related to demand charges on your bill without requiring any extra `utility_meter` or `template` helpers.
 
 ---
 
@@ -212,21 +189,8 @@ template:
           {{ net_import | round(2) }}
 ```
 
-#### Step 2: Create a Utility Meter for Power Exceedance
-If you are tracking power usage over a reference limit, create a `utility_meter` to get a running monthly total.
-
-```yaml
-# configuration.yaml
-utility_meter:
-  # Tracks power usage over the reference limit for the current month
-  monthly_power_exceedance_kwh:
-    source: sensor.leneda_...METER_1..._yesterdays_power_usage_over_reference
-    name: "Monthly Power Exceedance kWh"
-    cycle: monthly
-```
-
-#### Step 3: Create Template Sensors for Final Bill Calculation
-Finally, create template sensors that use the helpers above to calculate your final bill. This example calculates costs for both the previous month (100% accurate) and the current month (running estimate).
+#### Step 2: Create Template Sensors for Final Bill Calculation
+Finally, create template sensors that use the native Leneda sensors to calculate your final bill. This example calculates costs for both the previous month (100% accurate) and the current month (running estimate).
 
 Continue by adding the following under the `template:` section in `configuration.yaml`:
 ```yaml
@@ -234,16 +198,6 @@ Continue by adding the following under the `template:` section in `configuration
 template:
   - sensor:
       # (Add the sensors from Step 1 here if you haven't already)
-
-      # --- SENSOR TO CAPTURE LAST MONTH'S POWER EXCEEDANCE ---
-      # This reads the 'last_period' attribute from our utility meter.
-      - name: "Last Month Power Exceedance kWh"
-        unique_id: last_month_power_exceedance_kwh
-        unit_of_measurement: "kWh"
-        device_class: energy
-        state_class: total
-        state: >
-          {{ state_attr('sensor.monthly_power_exceedance_kwh', 'last_period') | float(0) }}
 
       # --- SENSOR FOR LAST MONTH'S FINAL BILL (100% ACCURATE) ---
       - name: "Electric Cost Last Month"
@@ -265,7 +219,7 @@ template:
 
           {# --- GET LAST MONTH'S FINAL USAGE DATA --- #}
           {% set total_grid_import_kwh = states('sensor.billable_grid_import_last_month') | float(0) %}
-          {% set total_exceedance_kwh = states('sensor.last_month_power_exceedance_kwh') | float(0) %}
+          {% set total_exceedance_kwh = states('sensor.leneda_...METER_1..._last_month_power_usage_over_reference') | float(0) %}
 
           {# --- CALCULATE COSTS, EXACTLY LIKE THE INVOICE --- #}
           {% set fixed_costs = rate_energy_fixed + rate_network_metering + rate_network_power_ref %}
@@ -297,7 +251,7 @@ template:
 
           {# --- GET CURRENT MONTH'S RUNNING USAGE DATA --- #}
           {% set total_grid_import_kwh = states('sensor.billable_grid_import_current_month') | float(0) %}
-          {% set total_exceedance_kwh = states('sensor.monthly_power_exceedance_kwh') | float(0) %}
+          {% set total_exceedance_kwh = states('sensor.leneda_...METER_1..._current_month_power_usage_over_reference') | float(0) %}
 
           {# --- CALCULATE RUNNING COSTS --- #}
           {% set fixed_costs = rate_energy_fixed + rate_network_metering + rate_network_power_ref %}
@@ -397,11 +351,13 @@ These sensors provide detailed data about your participation in an energy commun
 - Last Month's Remaining Production
 
 ### Power Usage Over Reference
-This sensor is only created if you configure the feature.
+These sensors are only created if you configure the "Reference Power" option.
 
 | Entity ID Suffix | UI Name | Description |
 |------------------|---------|-------------|
-| `..._yesterdays_power_usage_over_reference` | Yesterday's Power Usage Over Reference | Total energy (kWh) consumed above the configured reference power during the previous day. |
+| `..._yesterdays_power_usage_over_reference` | Yesterday's Power Usage Over Reference | Total energy (kWh) consumed above the reference power during the previous day. |
+| `..._current_month_power_usage_over_reference` | Current Month's Power Usage Over Reference | Total energy (kWh) consumed above the reference power from the start of the current month until yesterday. |
+| `..._last_month_power_usage_over_reference` | Last Month's Power Usage Over Reference | Total energy (kWh) consumed above the reference power during the entire previous calendar month. |
 
 ---
 
