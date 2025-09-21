@@ -115,9 +115,11 @@ async def async_setup_entry(
 
     # Conditionally add the power usage over reference sensor
     if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
-        all_sensors_ordered.append(
-            ("yesterdays_power_usage_over_reference", "50 - Yesterday's Power Usage Over Reference", "energy")
-        )
+        all_sensors_ordered.extend([
+            ("yesterdays_power_usage_over_reference", "50 - Yesterday's Power Usage Over Reference", "energy"),
+            ("current_month_power_usage_over_reference", "51 - Current Month's Power Usage Over Reference", "energy"),
+            ("last_month_power_usage_over_reference", "52 - Last Month's Power Usage Over Reference", "energy"),
+        ])
 
     # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []
