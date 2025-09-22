@@ -135,7 +135,7 @@ class LenedaApiClient:
         end_date = now
 
         try:
-            live_tasks = [
+            time_series_tasks = [
                 self.async_get_metering_data(
                     metering_point_id, obis_code, start_date, end_date
                 )
@@ -145,7 +145,7 @@ class LenedaApiClient:
                 metering_point_id, "1-1:1.29.0", start_date, end_date
             )
 
-            tasks = live_tasks + [aggregated_task]
+            tasks = time_series_tasks + [aggregated_task]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Check for any authentication errors first. If any call fails with 401/403,
