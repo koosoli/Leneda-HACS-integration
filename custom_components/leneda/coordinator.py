@@ -64,7 +64,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     total_overage_kwh += overage_energy
             except (ValueError, TypeError):
                 continue # Skip if value is not a valid number
-        return round(total_overage_kwh, 2)
+        return round(total_overage_kwh, 4)
 
     async def _async_update_data(self) -> dict[str, float | None]:
         """Fetch data from the Leneda API concurrently."""
@@ -247,12 +247,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(f"Peak item for {obis_code}: {peak_item}")
                     elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
                         # Network errors: preserve previous values
-                        _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
+                        _LOGGER.error("Error fetching time-series data for %s: %s", obis_code, result)
                         # Keep existing value if available
                         if obis_code not in data:
                             data[obis_code] = None
                     elif isinstance(result, Exception):
-                        _LOGGER.error("Error fetching live data for %s: %s", obis_code, result)
+                        _LOGGER.error("Error fetching time-series data for %s: %s", obis_code, result)
                         # Keep existing value if available
                         if obis_code not in data:
                             data[obis_code] = None
@@ -263,9 +263,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                             if result.get("meteringPointCode") is None or result.get("obisCode") is None:
                                 _LOGGER.debug("API returned null response for obis_code %s (likely not supported by meter)", obis_code)
                             else:
-                                _LOGGER.debug("No items found for live data obis_code %s (no recent data available)", obis_code)
+                                _LOGGER.debug("No items found for time-series data obis_code %s (no recent data available)", obis_code)
                         else:
-                            _LOGGER.warning("Unexpected response type for live data obis_code %s: %s", obis_code, result)
+                            _LOGGER.warning("Unexpected response type for time-series data obis_code %s: %s", obis_code, result)
                         # Keep existing value if available for empty responses
                         if obis_code not in data:
                             data[obis_code] = None
@@ -322,25 +322,25 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     prod_yesterday = data.get("p_04_yesterday_production")
                     export_yesterday = data.get("p_09_yesterday_exported")
                     if prod_yesterday is not None and export_yesterday is not None:
-                        data["p_12_yesterday_self_consumed"] = round(prod_yesterday - export_yesterday, 2)
+                        data["p_12_yesterday_self_consumed"] = round(prod_yesterday - export_yesterday, 4)
 
                     # Last Week
                     prod_last_week = data.get("p_06_last_week_production")
                     export_last_week = data.get("p_10_last_week_exported")
                     if prod_last_week is not None and export_last_week is not None:
-                        data["p_13_last_week_self_consumed"] = round(prod_last_week - export_last_week, 2)
+                        data["p_13_last_week_self_consumed"] = round(prod_last_week - export_last_week, 4)
 
                     # Current Month
                     prod_monthly = data.get("p_07_monthly_production")
                     export_monthly = data.get("p_15_monthly_exported")
                     if prod_monthly is not None and export_monthly is not None:
-                        data["p_16_monthly_self_consumed"] = round(prod_monthly - export_monthly, 2)
+                        data["p_16_monthly_self_consumed"] = round(prod_monthly - export_monthly, 4)
 
                     # Last Month
                     prod_last_month = data.get("p_08_previous_month_production")
                     export_last_month = data.get("p_11_last_month_exported")
                     if prod_last_month is not None and export_last_month is not None:
-                        data["p_14_last_month_self_consumed"] = round(prod_last_month - export_last_month, 2)
+                        data["p_14_last_month_self_consumed"] = round(prod_last_month - export_last_month, 4)
                 except (TypeError, ValueError) as e:
                     _LOGGER.error("Could not calculate self-consumption values: %s", e)
 
@@ -366,7 +366,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                             if isinstance(consumption_result, dict) and consumption_result.get("items"):
                                 overage = self._calculate_power_overage(consumption_result["items"], ref_power_kw)
                                 data["yesterdays_power_usage_over_reference"] = overage
-                                _LOGGER.debug(f"Calculated {overage:.2f} kWh over reference for yesterday.")
+                                _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for yesterday.")
 
                             # Process results for monthly power over reference
                             if power_over_ref_results:
@@ -375,7 +375,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                                 if isinstance(current_month_result, dict) and current_month_result.get("items"):
                                     overage = self._calculate_power_overage(current_month_result["items"], ref_power_kw)
                                     data["current_month_power_usage_over_reference"] = overage
-                                    _LOGGER.debug(f"Calculated {overage:.2f} kWh over reference for current month.")
+                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for current month.")
                                 elif isinstance(current_month_result, Exception):
                                     _LOGGER.error("Error fetching current month power over reference data: %s", current_month_result)
 
@@ -384,7 +384,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                                 if isinstance(last_month_result, dict) and last_month_result.get("items"):
                                     overage = self._calculate_power_overage(last_month_result["items"], ref_power_kw)
                                     data["last_month_power_usage_over_reference"] = overage
-                                    _LOGGER.debug(f"Calculated {overage:.2f} kWh over reference for last month.")
+                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for last month.")
                                 elif isinstance(last_month_result, Exception):
                                     _LOGGER.error("Error fetching last month power over reference data: %s", last_month_result)
                     except (ValueError, TypeError) as e:
