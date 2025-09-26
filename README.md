@@ -12,7 +12,7 @@ Monitor your **electricity and gas consumption and production** with daily updat
 
 ### ⚡ Smart Energy Monitoring
 - **Historical Analytics**: Provides daily, weekly, and monthly energy statistics based on complete data from the previous day.
-- **Gas Metering**: Support for gas volume (m³, Nm³) and energy (kWh) measurements.
+- **Gas Metering**: Support for gas volume (m³) and energy (kWh) measurements.
 - **Energy Communities**: Track production sharing across all community layers (if you are part of one).
 - **Built-in Calculations**: Automatically calculates key metrics like exported and self-consumed solar energy for yesterday, the last week, and the last month. *No complex templates needed!*
 
@@ -358,7 +358,7 @@ These sensors show the highest 15-minute average power reading from the previous
 | `..._peak_reactive_production` | Yesterday's Peak Reactive Production | kVAR |
 | `..._gas_peak_consumed_energy` | GAS - Yesterday's Peak Consumed Energy | kWh |
 | `..._gas_peak_consumed_volume` | GAS - Yesterday's Peak Consumed Volume | m³ |
-| `..._gas_peak_consumed_standard_volume` | GAS - Yesterday's Peak Consumed Standard Volume | Nm³ |
+| `..._gas_peak_consumed_standard_volume` | GAS - Yesterday's Peak Consumed Standard Volume | m³ |
 
 ### Energy Community & Sharing Sensors
 These sensors provide detailed data about your participation in an energy community.
