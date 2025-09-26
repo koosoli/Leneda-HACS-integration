@@ -7,7 +7,7 @@ Comprehensive Home Assistant integration for Leneda smart meters in Luxembourg. 
 ### ⚡ **Smart Energy Monitoring**
 - **Power Measurements**: Consumption/production from the previous day (kW, kVAR)
 - **Historical Energy**: 15-min, hourly, daily, weekly, monthly (kWh)
-- **Gas Metering**: Volume (m³, Nm³) and energy (kWh) with GAS prefix
+- **Gas Metering**: Volume (m³) and energy (kWh) with GAS prefix
 - **Energy Communities**: Production sharing across 4 community layers
 
 ### 🔄 **Device Consolidation** 
@@ -25,7 +25,7 @@ Comprehensive Home Assistant integration for Leneda smart meters in Luxembourg. 
 #### **Gas Monitoring** (3 sensors with GAS prefix)
 - GAS - Measured Consumed Energy (kWh)
 - GAS - Measured Consumed Volume (m³) 
-- GAS - Measured Consumed Standard Volume (Nm³)
+- GAS - Measured Consumed Standard Volume (m³)
 
 #### **Energy Community Sharing** (14 sensors)
 - Production sharing across 4 layers (AIR, ACR/ACF/AC1, CEL, APS/CER/CEN)

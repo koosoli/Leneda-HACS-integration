@@ -173,19 +173,19 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 aggregated_tasks.extend([
                     # Yesterday's Gas
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt
+                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt, aggregation_level="Day"
                     ),
                     # Last Week's Gas
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
+                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt, aggregation_level="Day"
                     ),
                     # Current Month's Gas
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt
+                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt, aggregation_level="Day"
                     ),
                     # Previous Month's Gas
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
+                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month, aggregation_level="Day"
                     ),
                 ])
 
@@ -276,21 +276,25 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     if isinstance(result, dict):
                         _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
-                        if series and len(series) > 0:
-                            item = None
-                            if key.startswith("c_02_") or key.startswith("p_02_"): # Hourly - get latest hour
-                                item = series[-1]
-                            else: # Other aggregated - get first (and usually only) value
-                                item = series[0]
-
-                            if item and item.get("value") is not None:
-                                data[key] = item["value"]
-                                _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
+                        if series:
+                            # For gas data (now aggregated by day), sum all values in the series.
+                            if key.startswith("g_"):
+                                total_value = sum(item.get("value") for item in series if item.get("value") is not None)
+                                data[key] = round(total_value, 4)
+                                _LOGGER.debug(f"Processed aggregated gas data for {key} by summing daily values: {data[key]}")
                             else:
-                                # Keep previous value if item is invalid or value is missing
-                                if key not in data or data[key] is None:
-                                    data[key] = 0.0
-                                _LOGGER.debug(f"Aggregated data for {key} has no value, keeping previous value: {data.get(key)}")
+                                # Existing logic for electricity data
+                                item = series[0]
+                                if key.startswith("c_02_") or key.startswith("p_02_"):  # Hourly - get latest hour
+                                    item = series[-1]
+
+                                if item and item.get("value") is not None:
+                                    data[key] = item["value"]
+                                    _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
+                                else:
+                                    if key not in data or data[key] is None:
+                                        data[key] = 0.0
+                                    _LOGGER.debug(f"Aggregated data for {key} has no value, keeping previous value: {data.get(key)}")
                         else:
                             # Keep previous value if available, otherwise set to 0.0 for energy sensors
                             if key not in data or data[key] is None:
