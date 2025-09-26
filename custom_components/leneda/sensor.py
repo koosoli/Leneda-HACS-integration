@@ -162,8 +162,13 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_native_unit_of_measurement = details["unit"]
 
         # Set device class, state class, and icon based on OBIS code and unit
-        if self._obis_code in GAS_OBIS_CODES:
-            # This is a gas sensor, use gas icon and device class
+        if self._obis_code == "7-20:99.33.17":
+            # This is a gas sensor measuring energy, so class is ENERGY
+            self._attr_device_class = SensorDeviceClass.ENERGY
+            self._attr_icon = "mdi:fire"
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif self._obis_code in GAS_OBIS_CODES:
+            # This is a gas sensor measuring volume, so class is GAS
             self._attr_device_class = SensorDeviceClass.GAS
             self._attr_icon = "mdi:fire"
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -176,7 +181,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             elif details["unit"] == "kWh":
                 self._attr_device_class = SensorDeviceClass.ENERGY
                 self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-            elif details["unit"] == "kVAR":
+            elif details["unit"] == "kvar":
                 self._attr_device_class = SensorDeviceClass.REACTIVE_POWER
                 self._attr_state_class = SensorStateClass.MEASUREMENT
             else:
@@ -298,11 +303,10 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         self._attr_unique_id = f"{metering_point_id}_{sensor_key}_v3"
 
         # Set device class and icon based on sensor type (gas or energy)
+        self._attr_device_class = SensorDeviceClass.ENERGY
         if sensor_key.startswith("g_"):
-            self._attr_device_class = SensorDeviceClass.GAS
             self._attr_icon = "mdi:fire"
         else:
-            self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_icon = "mdi:chart-bar"
 
         # Extract base metering point ID for device consolidation

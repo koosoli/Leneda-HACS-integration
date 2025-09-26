@@ -13,8 +13,8 @@ CONF_REFERENCE_POWER_STATIC = "reference_power_static"
 OBIS_CODES = {
     "1-1:1.29.0": {"name": "Measured Active Consumption", "unit": "kW", "service_type": "electricity"},
     "1-1:2.29.0": {"name": "Measured Active Production", "unit": "kW", "service_type": "electricity"},
-    "1-1:3.29.0": {"name": "Measured Reactive Consumption", "unit": "kVAR", "service_type": "electricity"},
-    "1-1:4.29.0": {"name": "Measured Reactive Production", "unit": "kVAR", "service_type": "electricity"},
+    "1-1:3.29.0": {"name": "Measured Reactive Consumption", "unit": "kvar", "service_type": "electricity"},
+    "1-1:4.29.0": {"name": "Measured Reactive Production", "unit": "kvar", "service_type": "electricity"},
     "1-65:1.29.1": {"name": "Consumption Covered by Production (Layer 1)", "unit": "kW", "service_type": "electricity"},
     "1-65:1.29.3": {"name": "Consumption Covered by Production (Layer 2)", "unit": "kW", "service_type": "electricity"},
     "1-65:1.29.2": {"name": "Consumption Covered by Production (Layer 3)", "unit": "kW", "service_type": "electricity"},
