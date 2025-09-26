@@ -1,0 +1,28 @@
+request_data_access:
+  name: Request Data Access
+  description: "Requests access to metering data from another party."
+  fields:
+    from_energy_id:
+      name: "From Energy ID"
+      description: "The energy ID of the party requesting access."
+      required: true
+      selector:
+        text:
+    from_name:
+      name: "From Name"
+      description: "The name of the party requesting access."
+      required: true
+      selector:
+        text:
+    metering_point_codes:
+      name: "Metering Point Codes"
+      description: "A list of metering point codes to request access for."
+      required: true
+      selector:
+        object:
+    obis_codes:
+      name: "OBIS Codes"
+      description: "A list of OBIS codes to request access for."
+      required: true
+      selector:
+        object:

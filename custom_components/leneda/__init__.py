@@ -31,8 +31,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = LenedaDataUpdateCoordinator(hass, api_client, metering_point_id, entry)
 
     manifest_path = Path(__file__).parent / "manifest.json"
-    with manifest_path.open() as manifest_file:
-        manifest_data = json.load(manifest_file)
+
+    def load_manifest():
+        """Load the manifest file."""
+        with manifest_path.open() as manifest_file:
+            return json.load(manifest_file)
+
+    manifest_data = await hass.async_add_executor_job(load_manifest)
     coordinator.version = manifest_data.get("version")
 
     await coordinator.async_config_entry_first_refresh()
