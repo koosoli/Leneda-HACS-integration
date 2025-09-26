@@ -117,8 +117,11 @@ class LenedaApiClient:
             "endDate": end_date.strftime("%Y-%m-%d"),
             "obisCode": obis_code,
             "aggregationLevel": aggregation_level,
-            "transformationMode": "Accumulation",
         }
+        # Transformation mode is not applicable for gas meters
+        if obis_code != "7-20:99.33.17":
+            params["transformationMode"] = "Accumulation"
+
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
         _LOGGER.debug("Requesting Leneda aggregated data from %s with params %s", url, params)
 
