@@ -34,7 +34,7 @@ class NoDataError(LenedaApiError):
 
 from homeassistant.util import dt as dt_util
 
-from .const import API_BASE_URL, OBIS_CODES
+from .const import API_BASE_URL, GAS_OBIS_CODES, OBIS_CODES
 
 
 class LenedaApiClient:
@@ -119,7 +119,7 @@ class LenedaApiClient:
             "aggregationLevel": aggregation_level,
         }
         # Transformation mode is not applicable for gas meters
-        if obis_code != "7-20:99.33.17":
+        if obis_code not in GAS_OBIS_CODES:
             params["transformationMode"] = "Accumulation"
 
         url = f"{API_BASE_URL}/api/metering-points/{metering_point_id}/time-series/aggregated"
