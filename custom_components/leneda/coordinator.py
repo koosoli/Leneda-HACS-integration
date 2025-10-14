@@ -170,24 +170,26 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                 ]
                 
-                aggregated_tasks.extend([
-                    # Yesterday's Gas
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt, aggregation_level="Day"
+                # Tasks for fetching detailed 15-min gas data for manual aggregation
+                _LOGGER.debug("Setting up tasks for detailed gas data...")
+                gas_tasks = [
+                    # Yesterday
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
-                    # Last Week's Gas
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt, aggregation_level="Day"
+                    # Last Week
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
                     ),
-                    # Current Month's Gas
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt, aggregation_level="Day"
+                    # Current Month
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt
                     ),
-                    # Previous Month's Gas
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month, aggregation_level="Day"
+                    # Previous Month
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
                     ),
-                ])
+                ]
 
                 # Add tasks for sharing codes for last month
                 for key, code in SHARING_CODES.items():
@@ -201,19 +203,23 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_06_last_week_consumption", "p_06_last_week_production", "p_10_last_week_exported",
                     "c_07_monthly_consumption", "p_07_monthly_production", "p_15_monthly_exported",
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
-                    "g_01_yesterday_consumption", "g_02_last_week_consumption", "g_04_monthly_consumption", "g_03_last_month_consumption",
+                ]
+                gas_keys = [
+                    "g_01_yesterday_consumption", "g_02_last_week_consumption",
+                    "g_04_monthly_consumption", "g_03_last_month_consumption"
                 ]
 
                 aggregated_keys.extend([f"{key}_last_month" for key in SHARING_CODES.keys()])
 
                 _LOGGER.debug("Gathering all API tasks...")
-                all_tasks = obis_tasks + aggregated_tasks + power_over_ref_tasks
+                all_tasks = obis_tasks + aggregated_tasks + power_over_ref_tasks + gas_tasks
                 results = await asyncio.gather(*all_tasks, return_exceptions=True)
                 _LOGGER.debug("All API tasks gathered.")
 
                 obis_results = results[:len(obis_tasks)]
                 aggregated_results = results[len(obis_tasks):len(obis_tasks) + len(aggregated_tasks)]
-                power_over_ref_results = results[len(obis_tasks) + len(aggregated_tasks):]
+                power_over_ref_results = results[len(obis_tasks) + len(aggregated_tasks):len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks)]
+                gas_results = results[len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks):]
 
                 data = self.data.copy() if self.data else {}
 
@@ -277,24 +283,17 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
                         if series:
-                            # For gas data (now aggregated by day), sum all values in the series.
-                            if key.startswith("g_"):
-                                total_value = sum(item.get("value") for item in series if item.get("value") is not None)
-                                data[key] = round(total_value, 4)
-                                _LOGGER.debug(f"Processed aggregated gas data for {key} by summing daily values: {data[key]}")
-                            else:
-                                # Existing logic for electricity data
-                                item = series[0]
-                                if key.startswith("c_02_") or key.startswith("p_02_"):  # Hourly - get latest hour
-                                    item = series[-1]
+                            item = series[0]
+                            if key.startswith("c_02_") or key.startswith("p_02_"):  # Hourly - get latest hour
+                                item = series[-1]
 
-                                if item and item.get("value") is not None:
-                                    data[key] = item["value"]
-                                    _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
-                                else:
-                                    if key not in data or data[key] is None:
-                                        data[key] = 0.0
-                                    _LOGGER.debug(f"Aggregated data for {key} has no value, keeping previous value: {data.get(key)}")
+                            if item and item.get("value") is not None:
+                                data[key] = item["value"]
+                                _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
+                            else:
+                                if key not in data or data[key] is None:
+                                    data[key] = 0.0
+                                _LOGGER.debug(f"Aggregated data for {key} has no value, keeping previous value: {data.get(key)}")
                         else:
                             # Keep previous value if available, otherwise set to 0.0 for energy sensors
                             if key not in data or data[key] is None:
@@ -309,6 +308,24 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.error("Error fetching aggregated data for %s: %s", key, result)
                         # Keep previous value if available
                         if key not in data: 
+                            data[key] = 0.0
+
+                _LOGGER.debug("Processing detailed gas results for manual aggregation...")
+                # Process detailed gas results
+                for key, result in zip(gas_keys, gas_results):
+                    if isinstance(result, dict) and result.get("items"):
+                        # Sum up all the 15-minute values to get the total consumption
+                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
+                        data[key] = round(total_value, 4)
+                        _LOGGER.debug(f"Manually aggregated gas data for {key}: {data[key]}")
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        _LOGGER.error(f"Error fetching detailed gas data for {key}: {result}")
+                        if key not in data:
+                            data[key] = 0.0
+                    else:
+                        # If no items or other error, keep previous value or set to 0.0
+                        _LOGGER.debug(f"No detailed gas items for {key}, keeping previous value or setting to 0.0")
+                        if key not in data or data[key] is None:
                             data[key] = 0.0
                     else:
                         # Handle unexpected aggregated results more gracefully
