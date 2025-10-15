@@ -170,15 +170,29 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                 ]
                 
-                # Task for fetching a large chunk of historical gas data for manual bucketing
-                _LOGGER.debug("Setting up task for historical gas data...")
+                # Tasks for fetching detailed 15-min gas data for manual aggregation
+                _LOGGER.debug("Setting up tasks for detailed gas data...")
                 gas_tasks = [
+                    # Yesterday
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id,
-                        GAS_OBIS_CODE,
-                        start_of_last_month,
-                        yesterday_end_dt,
-                    )
+                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt
+                    ),
+                    # Current Week
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, week_start_dt, yesterday_end_dt
+                    ),
+                    # Last Week
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
+                    ),
+                    # Current Month
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt
+                    ),
+                    # Previous Month
+                    self.api_client.async_get_metering_data(
+                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
+                    ),
                 ]
 
                 # Add tasks for sharing codes for last month
@@ -303,60 +317,21 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         if key not in data: 
                             data[key] = 0.0
 
-                _LOGGER.debug("Processing historical gas data for manual aggregation...")
-                gas_result = gas_results[0] if gas_results else None
-                if isinstance(gas_result, dict) and gas_result.get("items"):
-                    # Initialize counters
-                    g_yesterday = 0.0
-                    g_current_week = 0.0
-                    g_last_week = 0.0
-                    g_current_month = 0.0
-                    g_last_month = 0.0
-
-                    for item in gas_result["items"]:
-                        try:
-                            value = float(item["value"])
-                            timestamp_str = item["startedAt"].replace("Z", "+00:00")
-                            timestamp = dt_util.parse_datetime(timestamp_str)
-
-                            # Check and aggregate
-                            if yesterday_start_dt <= timestamp < today_start_dt:
-                                g_yesterday += value
-                            if week_start_dt <= timestamp < today_start_dt:
-                                g_current_week += value
-                            if last_week_start_dt <= timestamp < last_week_end_dt:
-                                g_last_week += value
-                            if month_start_dt <= timestamp < today_start_dt:
-                                g_current_month += value
-                            if start_of_last_month <= timestamp < end_of_last_month:
-                                g_last_month += value
-
-                        except (ValueError, TypeError, KeyError):
-                            continue # Skip malformed items
-
-                    # Assign calculated values
-                    data["g_01_yesterday_consumption"] = round(g_yesterday, 4)
-                    data["g_02_weekly_consumption"] = round(g_current_week, 4)
-                    data["g_03_last_week_consumption"] = round(g_last_week, 4)
-                    data["g_04_monthly_consumption"] = round(g_current_month, 4)
-                    data["g_05_last_month_consumption"] = round(g_last_month, 4)
-
-                    _LOGGER.debug(
-                        f"Manually aggregated gas data: Yesterday={data['g_01_yesterday_consumption']}, "
-                        f"Current Week={data['g_02_weekly_consumption']}, Last Week={data['g_03_last_week_consumption']}, "
-                        f"Current Month={data['g_04_monthly_consumption']}, Last Month={data['g_05_last_month_consumption']}"
-                    )
-
-                elif isinstance(gas_result, (aiohttp.ClientError, asyncio.TimeoutError)):
-                    _LOGGER.error(f"Error fetching historical gas data: {gas_result}")
-                    # Keep previous values on error
-                    for key in gas_keys:
+                _LOGGER.debug("Processing detailed gas results for manual aggregation...")
+                # Process detailed gas results
+                for key, result in zip(gas_keys, gas_results):
+                    if isinstance(result, dict) and result.get("items"):
+                        # Sum up all the 15-minute values to get the total consumption
+                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
+                        data[key] = round(total_value, 4)
+                        _LOGGER.debug(f"Manually aggregated gas data for {key}: {data[key]}")
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        _LOGGER.error(f"Error fetching detailed gas data for {key}: {result}")
                         data.setdefault(key, 0.0)
-                else:
-                    # If no items or other error, set to 0.0
-                    _LOGGER.debug("No historical gas items found, setting gas values to 0.0")
-                    for key in gas_keys:
-                        data[key] = 0.0
+                    else:
+                        # If no items or other error, keep previous value or set to 0.0
+                        _LOGGER.debug(f"No detailed gas items for {key}, keeping previous value or setting to 0.0")
+                        data.setdefault(key, 0.0)
 
                 # Calculate self-consumption values
                 try:
