@@ -195,8 +195,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
                 ]
                 gas_keys = [
-                    "g_01_yesterday_consumption", "g_02_last_week_consumption",
-                    "g_04_monthly_consumption", "g_03_last_month_consumption"
+                    "g_01_yesterday_consumption",
+                    "g_02_weekly_consumption",
+                    "g_03_last_week_consumption",
+                    "g_04_monthly_consumption",
+                    "g_05_last_month_consumption",
                 ]
 
                 aggregated_keys.extend([f"{key}_last_month" for key in SHARING_CODES.keys()])
@@ -305,6 +308,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 if isinstance(gas_result, dict) and gas_result.get("items"):
                     # Initialize counters
                     g_yesterday = 0.0
+                    g_current_week = 0.0
                     g_last_week = 0.0
                     g_current_month = 0.0
                     g_last_month = 0.0
@@ -318,6 +322,8 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                             # Check and aggregate
                             if yesterday_start_dt <= timestamp < today_start_dt:
                                 g_yesterday += value
+                            if week_start_dt <= timestamp < today_start_dt:
+                                g_current_week += value
                             if last_week_start_dt <= timestamp < last_week_end_dt:
                                 g_last_week += value
                             if month_start_dt <= timestamp < today_start_dt:
@@ -330,11 +336,16 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                     # Assign calculated values
                     data["g_01_yesterday_consumption"] = round(g_yesterday, 4)
-                    data["g_02_last_week_consumption"] = round(g_last_week, 4)
+                    data["g_02_weekly_consumption"] = round(g_current_week, 4)
+                    data["g_03_last_week_consumption"] = round(g_last_week, 4)
                     data["g_04_monthly_consumption"] = round(g_current_month, 4)
-                    data["g_03_last_month_consumption"] = round(g_last_month, 4)
+                    data["g_05_last_month_consumption"] = round(g_last_month, 4)
 
-                    _LOGGER.debug(f"Manually aggregated gas data: Yesterday={data['g_01_yesterday_consumption']}, Last Week={data['g_02_last_week_consumption']}, Current Month={data['g_04_monthly_consumption']}, Last Month={data['g_03_last_month_consumption']}")
+                    _LOGGER.debug(
+                        f"Manually aggregated gas data: Yesterday={data['g_01_yesterday_consumption']}, "
+                        f"Current Week={data['g_02_weekly_consumption']}, Last Week={data['g_03_last_week_consumption']}, "
+                        f"Current Month={data['g_04_monthly_consumption']}, Last Month={data['g_05_last_month_consumption']}"
+                    )
 
                 elif isinstance(gas_result, (aiohttp.ClientError, asyncio.TimeoutError)):
                     _LOGGER.error(f"Error fetching historical gas data: {gas_result}")
