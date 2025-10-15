@@ -327,15 +327,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(f"No detailed gas items for {key}, keeping previous value or setting to 0.0")
                         if key not in data or data[key] is None:
                             data[key] = 0.0
-                    else:
-                        # Handle unexpected aggregated results more gracefully
-                        if isinstance(result, dict) and result.get("unit") is None:
-                            _LOGGER.debug("API returned null unit for aggregated data %s (likely no data for time period)", key)
-                        else:
-                            _LOGGER.warning("Unexpected result type for aggregated data %s: %s", key, result)
-                        # Keep previous value if available
-                        if key not in data: 
-                            data[key] = 0.0
 
                 # Calculate self-consumption values
                 try:
