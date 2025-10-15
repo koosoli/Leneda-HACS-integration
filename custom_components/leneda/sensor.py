@@ -70,12 +70,13 @@ async def async_setup_entry(
 
         # --- Gas Consumption ---
         ("g_01_yesterday_consumption", "15 - GAS - Yesterday's Consumption", "energy"),
-        ("g_02_last_week_consumption", "16 - GAS - Last Week's Consumption", "energy"),
-        ("g_04_monthly_consumption", "17 - GAS - Current Month's Consumption", "energy"),
-        ("g_03_last_month_consumption", "18 - GAS - Last Month's Consumption", "energy"),
-        ("7-20:99.33.17", "19 - GAS - Yesterday's Peak Consumed Energy", "obis"),
-        ("7-1:99.23.15", "20 - GAS - Yesterday's Peak Consumed Volume", "obis"),
-        ("7-1:99.23.17", "21 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
+        ("g_02_weekly_consumption", "16 - GAS - Current Week Consumption", "energy"),
+        ("g_03_last_week_consumption", "17 - GAS - Last Week's Consumption", "energy"),
+        ("g_04_monthly_consumption", "18 - GAS - Current Month's Consumption", "energy"),
+        ("g_05_last_month_consumption", "19 - GAS - Last Month's Consumption", "energy"),
+        ("7-20:99.33.17", "20 - GAS - Yesterday's Peak Consumed Energy", "obis"),
+        ("7-1:99.23.15", "21 - GAS - Yesterday's Peak Consumed Volume", "obis"),
+        ("7-1:99.23.17", "22 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
 
         # --- Energy Sharing & Community ---
         ("1-65:1.29.1", "22 - Yesterday's Peak Consumption Covered (L1)", "obis"),
