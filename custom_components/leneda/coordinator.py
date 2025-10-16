@@ -14,6 +14,8 @@ import asyncio
 import async_timeout
 from datetime import timedelta
 import logging
+import json
+import os
 import aiohttp
 
 from homeassistant.core import HomeAssistant
@@ -34,6 +36,17 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_integration_version(hass: HomeAssistant) -> str:
+    """Return the version of the Leneda integration."""
+    try:
+        manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
+        with open(manifest_path) as manifest_file:
+            manifest = json.load(manifest_file)
+        return manifest.get("version", "unknown")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return "unknown"
+
+
 class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
     """A coordinator to fetch data from the Leneda API."""
 
@@ -48,6 +61,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         self.api_client = api_client
         self.metering_point_id = metering_point_id
         self.entry = entry
+        self.version = get_integration_version(hass)
 
     def _calculate_power_overage(self, items: list[dict], ref_power_kw: float) -> float:
         """Calculate total kWh consumed over a reference power."""
@@ -73,16 +87,17 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
         try:
             async with async_timeout.timeout(30):
-                # Define date ranges - Leneda only provides historical data (previous day onwards)
+                # Define date ranges
                 today_start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                week_start_dt = today_start_dt - timedelta(days=now.weekday())
                 yesterday_start_dt = today_start_dt - timedelta(days=1)
-                yesterday_end_dt = today_start_dt - timedelta(microseconds=1)
+                yesterday_end_dt = yesterday_start_dt.replace(hour=23, minute=59, second=59)
+
+                week_start_dt = today_start_dt - timedelta(days=now.weekday())
                 last_week_start_dt = week_start_dt - timedelta(weeks=1)
                 last_week_end_dt = week_start_dt - timedelta(microseconds=1)
-                first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                end_of_last_month = first_day_of_current_month - timedelta(microseconds=1)
+
+                month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                end_of_last_month = month_start_dt - timedelta(microseconds=1)
                 start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
                 CONSUMPTION_CODE = "1-1:1.29.0"
@@ -99,10 +114,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # Tasks for OBIS code data (historical data from yesterday)
                 _LOGGER.debug("Setting up tasks for OBIS code data...")
+                non_gas_obis_codes = {k: v for k, v in OBIS_CODES.items() if not k.startswith("7-")}
                 obis_tasks = [
                     self.api_client.async_get_metering_data(
                         self.metering_point_id, obis_code, yesterday_start_dt, yesterday_end_dt
-                    ) for obis_code in OBIS_CODES
+                    ) for obis_code in non_gas_obis_codes
                 ]
 
                 # Tasks for fetching detailed 15-min data for power-over-reference calculations
@@ -174,31 +190,29 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Tasks for fetching detailed 15-min gas data for manual aggregation
                 _LOGGER.debug("Setting up tasks for detailed gas data...")
-                gas_tasks = []
-                gas_codes_to_fetch = [GAS_ENERGY_CODE, GAS_VOLUME_CODE, GAS_STD_VOLUME_CODE]
-                for code in gas_codes_to_fetch:
-                    gas_tasks.extend([
-                        # Yesterday
-                        self.api_client.async_get_metering_data(
-                            self.metering_point_id, code, yesterday_start_dt, yesterday_end_dt
-                        ),
-                        # Current Week
-                        self.api_client.async_get_metering_data(
-                            self.metering_point_id, code, week_start_dt, yesterday_end_dt
-                        ),
-                        # Last Week
-                        self.api_client.async_get_metering_data(
-                            self.metering_point_id, code, last_week_start_dt, last_week_end_dt
-                        ),
-                        # Current Month
-                        self.api_client.async_get_metering_data(
-                            self.metering_point_id, code, month_start_dt, yesterday_end_dt
-                        ),
-                        # Previous Month
-                        self.api_client.async_get_metering_data(
-                            self.metering_point_id, code, start_of_last_month, end_of_last_month
-                        ),
-                    ])
+                gas_tasks = {}
+                gas_definitions = {
+                    "g_01_yesterday_consumption": (GAS_ENERGY_CODE, yesterday_start_dt, yesterday_end_dt),
+                    "g_02_weekly_consumption": (GAS_ENERGY_CODE, week_start_dt, yesterday_end_dt),
+                    "g_03_last_week_consumption": (GAS_ENERGY_CODE, last_week_start_dt, last_week_end_dt),
+                    "g_04_monthly_consumption": (GAS_ENERGY_CODE, month_start_dt, yesterday_end_dt),
+                    "g_05_last_month_consumption": (GAS_ENERGY_CODE, start_of_last_month, end_of_last_month),
+                    "g_10_yesterday_volume": (GAS_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt),
+                    "g_11_weekly_volume": (GAS_VOLUME_CODE, week_start_dt, yesterday_end_dt),
+                    "g_12_last_week_volume": (GAS_VOLUME_CODE, last_week_start_dt, last_week_end_dt),
+                    "g_13_monthly_volume": (GAS_VOLUME_CODE, month_start_dt, yesterday_end_dt),
+                    "g_14_last_month_volume": (GAS_VOLUME_CODE, start_of_last_month, end_of_last_month),
+                    "g_20_yesterday_std_volume": (GAS_STD_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt),
+                    "g_21_weekly_std_volume": (GAS_STD_VOLUME_CODE, week_start_dt, yesterday_end_dt),
+                    "g_22_last_week_std_volume": (GAS_STD_VOLUME_CODE, last_week_start_dt, last_week_end_dt),
+                    "g_23_monthly_std_volume": (GAS_STD_VOLUME_CODE, month_start_dt, yesterday_end_dt),
+                    "g_24_last_month_std_volume": (GAS_STD_VOLUME_CODE, start_of_last_month, end_of_last_month),
+                }
+
+                for key, (code, start, end) in gas_definitions.items():
+                    gas_tasks[key] = self.api_client.async_get_metering_data(
+                        self.metering_point_id, code, start, end
+                    )
 
                 # Add tasks for sharing codes for last month
                 for key, code in SHARING_CODES.items():
@@ -230,14 +244,22 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 aggregated_keys.extend([f"{key}_last_month" for key in SHARING_CODES.keys()])
 
                 _LOGGER.debug("Gathering all API tasks...")
-                all_tasks = obis_tasks + aggregated_tasks + power_over_ref_tasks + gas_tasks
-                results = await asyncio.gather(*all_tasks, return_exceptions=True)
+
+                # Combine all tasks into a single dictionary to handle results robustly
+                all_tasks = {**gas_tasks}
+                # To preserve order for slicing, we'll keep aggregated_tasks separate for now
+                # In a future refactor, we could move all to a dictionary-based system
+
+                task_list = obis_tasks + aggregated_tasks + power_over_ref_tasks + list(all_tasks.values())
+                results = await asyncio.gather(*task_list, return_exceptions=True)
                 _LOGGER.debug("All API tasks gathered.")
 
                 obis_results = results[:len(obis_tasks)]
                 aggregated_results = results[len(obis_tasks):len(obis_tasks) + len(aggregated_tasks)]
                 power_over_ref_results = results[len(obis_tasks) + len(aggregated_tasks):len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks)]
-                gas_results = results[len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks):]
+
+                # Map results back to their keys for gas tasks
+                gas_results_dict = dict(zip(all_tasks.keys(), results[len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks):]))
 
                 data = self.data.copy() if self.data else {}
 
@@ -255,12 +277,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     data.setdefault(key, 0.0)
                 
                 # Initialize OBIS code sensors
-                for obis_code in OBIS_CODES.keys():
+                for obis_code in non_gas_obis_codes.keys():
                     data.setdefault(obis_code, None)
 
                 _LOGGER.debug("Processing OBIS code results...")
                 # Process OBIS code results (yesterday's data)
-                for obis_code, result in zip(OBIS_CODES.keys(), obis_results):
+                for obis_code, result in zip(non_gas_obis_codes.keys(), obis_results):
                     if isinstance(result, dict) and result.get("items"):
                         _LOGGER.debug(f"Processing peak data for {obis_code}, result: {result}")
                         # Find the item with the maximum value for the day (peak)
@@ -329,35 +351,33 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                             data[key] = 0.0
 
                 _LOGGER.debug("Processing detailed gas results for manual aggregation...")
-                # Process detailed gas results
-                num_gas_results_per_type = len(gas_results) // 3
-                gas_energy_results = gas_results[:num_gas_results_per_type]
-                gas_volume_results = gas_results[num_gas_results_per_type:2*num_gas_results_per_type]
-                gas_std_volume_results = gas_results[2*num_gas_results_per_type:]
-
-                # Process gas energy
-                for key, result in zip(gas_energy_keys, gas_energy_results):
+                # Process detailed gas results from the dictionary
+                for key, result in gas_results_dict.items():
                     if isinstance(result, dict) and result.get("items"):
-                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
+                        items = result["items"]
+                        total_value = sum(item.get("value", 0) for item in items if item.get("value") is not None)
                         data[key] = round(total_value, 4)
-                    else:
-                        data.setdefault(key, 0.0)
+                        _LOGGER.debug(f"Successfully processed gas data for {key}: {data[key]}")
 
-                # Process gas volume
-                for key, result in zip(gas_volume_keys, gas_volume_results):
-                    if isinstance(result, dict) and result.get("items"):
-                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
-                        data[key] = round(total_value, 4)
-                    else:
-                        data.setdefault(key, 0.0)
+                        # Also calculate peak values for yesterday's gas sensors
+                        if "yesterday" in key:
+                            peak_item = max(items, key=lambda x: x.get("value", 0))
+                            if key == "g_01_yesterday_consumption":
+                                data["7-20:99.33.17"] = peak_item.get("value")
+                                data["7-20:99.33.17_peak_timestamp"] = peak_item.get("startedAt")
+                            elif key == "g_10_yesterday_volume":
+                                data["7-1:99.23.15"] = peak_item.get("value")
+                                data["7-1:99.23.15_peak_timestamp"] = peak_item.get("startedAt")
+                            elif key == "g_20_yesterday_std_volume":
+                                data["7-1:99.23.17"] = peak_item.get("value")
+                                data["7-1:99.23.17_peak_timestamp"] = peak_item.get("startedAt")
 
-                # Process standard gas volume
-                for key, result in zip(gas_std_volume_keys, gas_std_volume_results):
-                    if isinstance(result, dict) and result.get("items"):
-                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
-                        data[key] = round(total_value, 4)
+                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
+                        _LOGGER.error(f"Error fetching gas data for {key}: {result}")
+                        data.setdefault(key, 0.0) # Preserve old value on error
                     else:
-                        data.setdefault(key, 0.0)
+                        _LOGGER.warning(f"No items found or error for gas data {key}: {result}")
+                        data.setdefault(key, 0.0) # Set to 0 if no data
 
 
                 # Calculate self-consumption values
