@@ -26,7 +26,7 @@ OBIS_CODES = {
     "1-65:2.29.4": {"name": "Production Shared (Layer 4)", "unit": "kW", "service_type": "electricity"},
     "1-65:2.29.9": {"name": "Remaining Production After Sharing", "unit": "kW", "service_type": "electricity"},
     "7-1:99.23.15": {"name": "GAS - Measured Consumed Volume", "unit": "m³", "service_type": "gas"},
-    "7-1:99.23.17": {"name": "GAS - Measured Consumed Standard Volume", "unit": "m³", "service_type": "gas"},
+    "7-1:99.23.17": {"name": "GAS - Measured Consumed Standard Volume", "unit": "Nm³", "service_type": "gas"},
     "7-20:99.33.17": {"name": "GAS - Measured Consumed Energy", "unit": "kWh", "service_type": "gas"},
 }
 

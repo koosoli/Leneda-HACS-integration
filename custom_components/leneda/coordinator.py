@@ -88,7 +88,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 CONSUMPTION_CODE = "1-1:1.29.0"
                 PRODUCTION_CODE = "1-1:2.29.0"
                 EXPORT_CODE = "1-65:2.29.9"
-                GAS_OBIS_CODE = "7-20:99.33.17"
+                GAS_ENERGY_CODE = "7-20:99.33.17"
+                GAS_VOLUME_CODE = "7-1:99.23.15"
+                GAS_STD_VOLUME_CODE = "7-1:99.23.17"
 
                 SHARING_CODES = {
                     "s_c_l1": "1-65:1.29.1", "s_c_l2": "1-65:1.29.3", "s_c_l3": "1-65:1.29.2", "s_c_l4": "1-65:1.29.4", "s_c_rem": "1-65:1.29.9",
@@ -172,28 +174,31 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 
                 # Tasks for fetching detailed 15-min gas data for manual aggregation
                 _LOGGER.debug("Setting up tasks for detailed gas data...")
-                gas_tasks = [
-                    # Yesterday
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, yesterday_start_dt, yesterday_end_dt
-                    ),
-                    # Current Week
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, week_start_dt, yesterday_end_dt
-                    ),
-                    # Last Week
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, last_week_start_dt, last_week_end_dt
-                    ),
-                    # Current Month
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, month_start_dt, yesterday_end_dt
-                    ),
-                    # Previous Month
-                    self.api_client.async_get_metering_data(
-                        self.metering_point_id, GAS_OBIS_CODE, start_of_last_month, end_of_last_month
-                    ),
-                ]
+                gas_tasks = []
+                gas_codes_to_fetch = [GAS_ENERGY_CODE, GAS_VOLUME_CODE, GAS_STD_VOLUME_CODE]
+                for code in gas_codes_to_fetch:
+                    gas_tasks.extend([
+                        # Yesterday
+                        self.api_client.async_get_metering_data(
+                            self.metering_point_id, code, yesterday_start_dt, yesterday_end_dt
+                        ),
+                        # Current Week
+                        self.api_client.async_get_metering_data(
+                            self.metering_point_id, code, week_start_dt, yesterday_end_dt
+                        ),
+                        # Last Week
+                        self.api_client.async_get_metering_data(
+                            self.metering_point_id, code, last_week_start_dt, last_week_end_dt
+                        ),
+                        # Current Month
+                        self.api_client.async_get_metering_data(
+                            self.metering_point_id, code, month_start_dt, yesterday_end_dt
+                        ),
+                        # Previous Month
+                        self.api_client.async_get_metering_data(
+                            self.metering_point_id, code, start_of_last_month, end_of_last_month
+                        ),
+                    ])
 
                 # Add tasks for sharing codes for last month
                 for key, code in SHARING_CODES.items():
@@ -208,13 +213,19 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_07_monthly_consumption", "p_07_monthly_production", "p_15_monthly_exported",
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
                 ]
-                gas_keys = [
-                    "g_01_yesterday_consumption",
-                    "g_02_weekly_consumption",
-                    "g_03_last_week_consumption",
-                    "g_04_monthly_consumption",
-                    "g_05_last_month_consumption",
+                gas_energy_keys = [
+                    "g_01_yesterday_consumption", "g_02_weekly_consumption", "g_03_last_week_consumption",
+                    "g_04_monthly_consumption", "g_05_last_month_consumption"
                 ]
+                gas_volume_keys = [
+                    "g_10_yesterday_volume", "g_11_weekly_volume", "g_12_last_week_volume",
+                    "g_13_monthly_volume", "g_14_last_month_volume"
+                ]
+                gas_std_volume_keys = [
+                    "g_20_yesterday_std_volume", "g_21_weekly_std_volume", "g_22_last_week_std_volume",
+                    "g_23_monthly_std_volume", "g_24_last_month_std_volume"
+                ]
+                gas_keys = gas_energy_keys + gas_volume_keys + gas_std_volume_keys
 
                 aggregated_keys.extend([f"{key}_last_month" for key in SHARING_CODES.keys()])
 
@@ -319,19 +330,35 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 _LOGGER.debug("Processing detailed gas results for manual aggregation...")
                 # Process detailed gas results
-                for key, result in zip(gas_keys, gas_results):
+                num_gas_results_per_type = len(gas_results) // 3
+                gas_energy_results = gas_results[:num_gas_results_per_type]
+                gas_volume_results = gas_results[num_gas_results_per_type:2*num_gas_results_per_type]
+                gas_std_volume_results = gas_results[2*num_gas_results_per_type:]
+
+                # Process gas energy
+                for key, result in zip(gas_energy_keys, gas_energy_results):
                     if isinstance(result, dict) and result.get("items"):
-                        # Sum up all the 15-minute values to get the total consumption
                         total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
                         data[key] = round(total_value, 4)
-                        _LOGGER.debug(f"Manually aggregated gas data for {key}: {data[key]}")
-                    elif isinstance(result, (aiohttp.ClientError, asyncio.TimeoutError)):
-                        _LOGGER.error(f"Error fetching detailed gas data for {key}: {result}")
-                        data.setdefault(key, 0.0)
                     else:
-                        # If no items or other error, keep previous value or set to 0.0
-                        _LOGGER.debug(f"No detailed gas items for {key}, keeping previous value or setting to 0.0")
                         data.setdefault(key, 0.0)
+
+                # Process gas volume
+                for key, result in zip(gas_volume_keys, gas_volume_results):
+                    if isinstance(result, dict) and result.get("items"):
+                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
+                        data[key] = round(total_value, 4)
+                    else:
+                        data.setdefault(key, 0.0)
+
+                # Process standard gas volume
+                for key, result in zip(gas_std_volume_keys, gas_std_volume_results):
+                    if isinstance(result, dict) and result.get("items"):
+                        total_value = sum(item.get("value") for item in result["items"] if item.get("value") is not None)
+                        data[key] = round(total_value, 4)
+                    else:
+                        data.setdefault(key, 0.0)
+
 
                 # Calculate self-consumption values
                 try:
