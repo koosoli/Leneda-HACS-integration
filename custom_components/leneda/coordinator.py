@@ -152,56 +152,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     self.api_client.async_get_aggregated_metering_data(
                         self.metering_point_id, PRODUCTION_CODE, start_of_last_month, end_of_last_month
                     ),
-                    # GAS - Yesterday (all 3 OBIS codes)
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_STANDARD_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_ENERGY_CODE, yesterday_start_dt, yesterday_end_dt
-                    ),
-                    # GAS - Current Week
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_VOLUME_CODE, week_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_STANDARD_VOLUME_CODE, week_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_ENERGY_CODE, week_start_dt, now
-                    ),
-                    # GAS - Last Week
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_VOLUME_CODE, last_week_start_dt, last_week_end_dt
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_STANDARD_VOLUME_CODE, last_week_start_dt, last_week_end_dt
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_ENERGY_CODE, last_week_start_dt, last_week_end_dt
-                    ),
-                    # GAS - Current Month
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_VOLUME_CODE, month_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_STANDARD_VOLUME_CODE, month_start_dt, now
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_ENERGY_CODE, month_start_dt, now
-                    ),
-                    # GAS - Previous Month
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_VOLUME_CODE, start_of_last_month, end_of_last_month
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_STANDARD_VOLUME_CODE, start_of_last_month, end_of_last_month
-                    ),
-                    self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, GAS_ENERGY_CODE, start_of_last_month, end_of_last_month
-                    ),
                 ]
                 quarter_hour_keys = [
                     "c_01_quarter_hourly_consumption", "p_01_quarter_hourly_production"
@@ -219,12 +169,6 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     "c_04_yesterday_consumption", "p_04_yesterday_production",
                     "c_06_last_week_consumption", "p_06_last_week_production",
                     "c_08_previous_month_consumption", "p_08_previous_month_production",
-                    # Gas aggregated sensors
-                    "g_volume_yesterday", "g_standard_volume_yesterday", "g_energy_yesterday",
-                    "g_volume_current_week", "g_standard_volume_current_week", "g_energy_current_week",
-                    "g_volume_last_week", "g_standard_volume_last_week", "g_energy_last_week",
-                    "g_volume_current_month", "g_standard_volume_current_month", "g_energy_current_month",
-                    "g_volume_previous_month", "g_standard_volume_previous_month", "g_energy_previous_month",
                 ]
 
                 _LOGGER.debug("Gathering all API tasks...")

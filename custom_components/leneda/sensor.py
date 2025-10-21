@@ -107,38 +107,9 @@ async def async_setup_entry(
         ("7-1:99.23.15", "44 - GAS - Current Volume Reading (m³)", "obis"),
         ("7-1:99.23.17", "45 - GAS - Current Standard Volume Reading (Nm³)", "obis"),
         
-        # --- Gas - Aggregated Energy (kWh) ---
-        ("g_energy_yesterday", "46 - GAS - Yesterday's Consumption (kWh)", "energy"),
-        ("g_energy_current_week", "47 - GAS - Current Week Consumption (kWh)", "energy"),
-        ("g_energy_last_week", "48 - GAS - Last Week's Consumption (kWh)", "energy"),
-        ("g_energy_current_month", "49 - GAS - Current Month Consumption (kWh)", "energy"),
-        ("g_energy_previous_month", "50 - GAS - Previous Month Consumption (kWh)", "energy"),
-        
-        # --- Gas - Aggregated Volume (m³) ---
-        ("g_volume_yesterday", "51 - GAS - Yesterday's Volume (m³)", "gas_volume"),
-        ("g_volume_current_week", "52 - GAS - Current Week Volume (m³)", "gas_volume"),
-        ("g_volume_last_week", "53 - GAS - Last Week's Volume (m³)", "gas_volume"),
-        ("g_volume_current_month", "54 - GAS - Current Month Volume (m³)", "gas_volume"),
-        ("g_volume_previous_month", "55 - GAS - Previous Month Volume (m³)", "gas_volume"),
-        
-        # --- Gas - Aggregated Standard Volume (Nm³) ---
-        ("g_standard_volume_yesterday", "56 - GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_standard_volume_current_week", "57 - GAS - Current Week Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_standard_volume_last_week", "58 - GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_standard_volume_current_month", "59 - GAS - Current Month Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_standard_volume_previous_month", "60 - GAS - Previous Month Standard Volume (Nm³)", "gas_std_volume"),
-        
         # --- Gas Peak ---
-        ("g_peak_yesterday", "61 - GAS - Yesterday's Peak Energy (kWh per 15min)", "energy"),
+        ("g_peak_yesterday", "46 - GAS - Yesterday's Peak Energy (kWh per 15min)", "energy"),
     ]
-
-    # Conditionally add the power usage over reference sensor
-    if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
-        all_sensors_ordered.extend([
-            ("yesterdays_power_usage_over_reference", "61 - Yesterday's Power Usage Over Reference", "energy"),
-            ("current_month_power_usage_over_reference", "62 - Current Month's Power Usage Over Reference", "energy"),
-            ("last_month_power_usage_over_reference", "63 - Last Month's Power Usage Over Reference", "energy"),
-        ])
 
     # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []

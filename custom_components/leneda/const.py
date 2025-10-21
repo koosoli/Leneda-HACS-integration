@@ -36,25 +36,3 @@ GAS_OBIS_CODES = {
     "7-1:99.23.17",   # Measured consumed standard volume (Nm³)
     "7-20:99.33.17",  # Measured consumed energy (kWh)
 }
-
-# Gas aggregated sensor keys for time-based consumption (matches coordinator keys)
-GAS_AGGREGATED_SENSOR_KEYS = {
-    # Gas volume (m³) - 7-1:99.23.15
-    "g_volume_yesterday": "Gas Volume Yesterday",
-    "g_volume_current_week": "Gas Volume Current Week",
-    "g_volume_last_week": "Gas Volume Last Week",
-    "g_volume_current_month": "Gas Volume Current Month",
-    "g_volume_previous_month": "Gas Volume Previous Month",
-    # Gas standard volume (Nm³) - 7-1:99.23.17
-    "g_standard_volume_yesterday": "Gas Standard Volume Yesterday",
-    "g_standard_volume_current_week": "Gas Standard Volume Current Week",
-    "g_standard_volume_last_week": "Gas Standard Volume Last Week",
-    "g_standard_volume_current_month": "Gas Standard Volume Current Month",
-    "g_standard_volume_previous_month": "Gas Standard Volume Previous Month",
-    # Gas Energy (kWh) - 7-20:99.33.17
-    "g_energy_yesterday": "Gas Energy Yesterday",
-    "g_energy_current_week": "Gas Energy Current Week",
-    "g_energy_last_week": "Gas Energy Last Week",
-    "g_energy_current_month": "Gas Energy Current Month",
-    "g_energy_previous_month": "Gas Energy Previous Month",
-}
