@@ -177,6 +177,7 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
 
     _attr_has_entity_name = True
     _attr_suggested_display_precision = 2
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
@@ -191,6 +192,8 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_name = details["name"]
         self._attr_unique_id = f"{metering_point_id}_{obis_code}_v3"
         self._attr_native_unit_of_measurement = details["unit"]
+        # Set translation key for proper dashboard integration
+        self._attr_translation_key = "leneda_sensor"
 
         # Set device class, state class, and icon based on OBIS code and unit
         if self._obis_code == "7-20:99.33.17":
@@ -319,6 +322,7 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_suggested_display_precision = 2
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self,
@@ -338,6 +342,8 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_icon = icon
+        # Set translation key for proper dashboard integration
+        self._attr_translation_key = "leneda_energy_sensor"
 
         # Extract base metering point ID for device consolidation
         base_meter_id = self._get_base_meter_id(metering_point_id)

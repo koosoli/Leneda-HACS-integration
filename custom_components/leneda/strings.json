@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Leneda Energy Meter Integration",
+        "description": "Configure your Leneda energy meter connection.",
+        "data": {
+          "metering_point_id": "Metering Point ID",
+          "api_key": "API Key",
+          "energy_id": "Energy ID",
+          "reference_power_entity": "Reference Power Entity (optional)",
+          "reference_power_static": "Static Reference Power Value (optional, kW)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication credentials. Please check your API Key and Energy ID.",
+      "cannot_connect": "Cannot connect to Leneda API. Please check your internet connection.",
+      "no_data": "No data available for this metering point.",
+      "ambiguous_reference": "Please provide either a reference power entity OR a static value, not both.",
+      "unknown": "An unexpected error occurred. Please try again."
+    },
+    "abort": {
+      "already_configured": "This metering point is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "leneda_sensor": {
+        "name": "Leneda Sensor"
+      },
+      "leneda_energy_sensor": {
+        "name": "Leneda Energy Sensor"
+      }
+    }
+  }
+}
