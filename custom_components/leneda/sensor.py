@@ -102,14 +102,36 @@ async def async_setup_entry(
         ("s_p_l4_last_month", "41 - Last Month's Production Shared (L4)", "energy"),
         ("s_p_rem_last_month", "42 - Last Month's Remaining Production", "energy"),
 
-        # --- Gas - Live OBIS Readings ---
-        ("7-20:99.33.17", "43 - GAS - Current Energy Reading (kWh)", "obis"),
-        ("7-1:99.23.15", "44 - GAS - Current Volume Reading (m³)", "obis"),
-        ("7-1:99.23.17", "45 - GAS - Current Standard Volume Reading (Nm³)", "obis"),
-        
-        # --- Gas Peak ---
-        ("g_peak_yesterday", "46 - GAS - Yesterday's Peak Energy (kWh per 15min)", "energy"),
+        # --- Gas Consumption ---
+        ("g_01_yesterday_consumption", "43 - GAS - Yesterday's Consumption (kWh)", "energy"),
+        ("g_02_weekly_consumption", "44 - GAS - Current Week Consumption (kWh)", "energy"),
+        ("g_03_last_week_consumption", "45 - GAS - Last Week's Consumption (kWh)", "energy"),
+        ("g_04_monthly_consumption", "46 - GAS - Current Month's Consumption (kWh)", "energy"),
+        ("g_05_last_month_consumption", "47 - GAS - Last Month's Consumption (kWh)", "energy"),
+        ("g_10_yesterday_volume", "48 - GAS - Yesterday's Volume (m³)", "gas_volume"),
+        ("g_11_weekly_volume", "49 - GAS - Current Week's Volume (m³)", "gas_volume"),
+        ("g_12_last_week_volume", "50 - GAS - Last Week's Volume (m³)", "gas_volume"),
+        ("g_13_monthly_volume", "51 - GAS - Current Month's Volume (m³)", "gas_volume"),
+        ("g_14_last_month_volume", "52 - GAS - Last Month's Volume (m³)", "gas_volume"),
+        ("g_20_yesterday_std_volume", "53 - GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_21_weekly_std_volume", "54 - GAS - Current Week's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_22_last_week_std_volume", "55 - GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_23_monthly_std_volume", "56 - GAS - Current Month's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_24_last_month_std_volume", "57 - GAS - Last Month's Standard Volume (Nm³)", "gas_std_volume"),
+
+        # --- OBIS Peak Gas Codes ---
+        ("7-20:99.33.17", "58 - GAS - Yesterday's Peak Consumed Energy", "obis"),
+        ("7-1:99.23.15", "59 - GAS - Yesterday's Peak Consumed Volume", "obis"),
+        ("7-1:99.23.17", "60 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
     ]
+
+    # Conditionally add the power usage over reference sensor
+    if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
+        all_sensors_ordered.extend([
+            ("yesterdays_power_usage_over_reference", "61 - Yesterday's Power Usage Over Reference", "energy"),
+            ("current_month_power_usage_over_reference", "62 - Current Month's Power Usage Over Reference", "energy"),
+            ("last_month_power_usage_over_reference", "63 - Last Month's Power Usage Over Reference", "energy"),
+        ])
 
     # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []

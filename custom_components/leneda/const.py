@@ -33,6 +33,6 @@ OBIS_CODES = {
 # Gas sensor OBIS codes for easy identification
 GAS_OBIS_CODES = {
     "7-1:99.23.15",   # Measured consumed volume (m³)
-    "7-1:99.23.17",   # Measured consumed standard volume (Nm³)
+    "7-1:99.23.17",   # Measured consumed standard volume (m³)
     "7-20:99.33.17",  # Measured consumed energy (kWh)
 }

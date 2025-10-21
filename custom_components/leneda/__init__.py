@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    coordinator = LenedaDataUpdateCoordinator(hass, api_client, metering_point_id)
+    coordinator = LenedaDataUpdateCoordinator(hass, api_client, metering_point_id, entry)
 
     manifest_path = Path(__file__).parent / "manifest.json"
 
