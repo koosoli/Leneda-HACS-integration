@@ -12,10 +12,6 @@ from .const import (
     CONF_METERING_POINT_ID,
     CONF_REFERENCE_POWER_ENTITY,
     CONF_REFERENCE_POWER_STATIC,
-    CONF_HAS_ENERGY,
-    CONF_HAS_SOLAR,
-    CONF_HAS_WATER,
-    CONF_HAS_GAS,
     DOMAIN,
 )
 
@@ -62,10 +58,6 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_METERING_POINT_ID): str,
                     vol.Required(CONF_API_KEY): str,
                     vol.Required(CONF_ENERGY_ID): str,
-                    vol.Required(CONF_HAS_ENERGY, default=True): bool,
-                    vol.Required(CONF_HAS_SOLAR, default=False): bool,
-                    vol.Required(CONF_HAS_WATER, default=False): bool,
-                    vol.Required(CONF_HAS_GAS, default=False): bool,
                     vol.Optional(CONF_REFERENCE_POWER_ENTITY): sel.EntitySelector(
                         sel.EntitySelectorConfig(domain="input_number"),
                     ),

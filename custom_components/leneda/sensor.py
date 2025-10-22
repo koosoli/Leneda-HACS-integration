@@ -32,10 +32,6 @@ from .const import (
     GAS_OBIS_CODES,
     CONF_REFERENCE_POWER_ENTITY,
     CONF_REFERENCE_POWER_STATIC,
-    CONF_HAS_ENERGY,
-    CONF_HAS_SOLAR,
-    CONF_HAS_WATER,
-    CONF_HAS_GAS,
 )
 from .coordinator import LenedaDataUpdateCoordinator
 
@@ -53,106 +49,99 @@ async def async_setup_entry(
 
     _LOGGER.debug("Setting up Leneda sensors for metering point %s", metering_point_id)
 
-    has_energy = entry.data.get(CONF_HAS_ENERGY, True)
-    has_solar = entry.data.get(CONF_HAS_SOLAR, False)
-    has_water = entry.data.get(CONF_HAS_WATER, False)
-    has_gas = entry.data.get(CONF_HAS_GAS, False)
+    all_sensors_ordered = [
+        # --- Energy Consumption ---
+        ("c_04_yesterday_consumption", "01 - Yesterday's Consumption", "energy"),
+        ("c_05_weekly_consumption", "02 - Current Week Consumption", "energy"),
+        ("c_06_last_week_consumption", "03 - Last Week's Consumption", "energy"),
+        ("c_07_monthly_consumption", "04 - Current Month Consumption", "energy"),
+        ("c_08_previous_month_consumption", "05 - Previous Month's Consumption", "energy"),
+        ("1-1:1.29.0", "06 - Yesterday's Peak Active Consumption", "obis"),
+        ("1-1:3.29.0", "07 - Yesterday's Peak Reactive Consumption", "obis"),
 
-    active_sensors = []
+        # --- Energy Production ---
+        ("p_04_yesterday_production", "08 - Yesterday's Production", "energy"),
+        ("p_05_weekly_production", "09 - Current Week Production", "energy"),
+        ("p_06_last_week_production", "10 - Last Week's Production", "energy"),
+        ("p_07_monthly_production", "11 - Current Month Production", "energy"),
+        ("p_08_previous_month_production", "12 - Previous Month's Production", "energy"),
+        ("1-1:2.29.0", "13 - Yesterday's Peak Active Production", "obis"),
+        ("1-1:4.29.0", "14 - Yesterday's Peak Reactive Production", "obis"),
 
-    if has_energy:
-        energy_sensors = [
-            ("c_04_yesterday_consumption", "Yesterday's Consumption", "energy"),
-            ("c_05_weekly_consumption", "Current Week Consumption", "energy"),
-            ("c_06_last_week_consumption", "Last Week's Consumption", "energy"),
-            ("c_07_monthly_consumption", "Current Month Consumption", "energy"),
-            ("c_08_previous_month_consumption", "Previous Month's Consumption", "energy"),
-            ("1-1:1.29.0", "Yesterday's Peak Active Consumption", "obis"),
-            ("1-1:3.29.0", "Yesterday's Peak Reactive Consumption", "obis"),
-            ("1-65:1.29.1", "Yesterday's Peak Consumption Covered (L1)", "obis"),
-            ("1-65:1.29.3", "Yesterday's Peak Consumption Covered (L2)", "obis"),
-            ("1-65:1.29.2", "Yesterday's Peak Consumption Covered (L3)", "obis"),
-            ("1-65:1.29.4", "Yesterday's Peak Consumption Covered (L4)", "obis"),
-            ("1-65:1.29.9", "Yesterday's Peak Remaining Consumption", "obis"),
-            ("s_c_l1_last_month", "Last Month's Consumption Covered (L1)", "energy"),
-            ("s_c_l2_last_month", "Last Month's Consumption Covered (L2)", "energy"),
-            ("s_c_l3_last_month", "Last Month's Consumption Covered (L3)", "energy"),
-            ("s_c_l4_last_month", "Last Month's Consumption Covered (L4)", "energy"),
-            ("s_c_rem_last_month", "Last Month's Remaining Consumption", "energy"),
-        ]
-        active_sensors.extend(energy_sensors)
+        # --- Energy Sharing & Community ---
+        ("1-65:1.29.1", "15 - Yesterday's Peak Consumption Covered (L1)", "obis"),
+        ("1-65:1.29.3", "16 - Yesterday's Peak Consumption Covered (L2)", "obis"),
+        ("1-65:1.29.2", "17 - Yesterday's Peak Consumption Covered (L3)", "obis"),
+        ("1-65:1.29.4", "18 - Yesterday's Peak Consumption Covered (L4)", "obis"),
+        ("1-65:1.29.9", "19 - Yesterday's Peak Remaining Consumption", "obis"),
+        ("1-65:2.29.1", "20 - Yesterday's Peak Production Shared (L1)", "obis"),
+        ("1-65:2.29.3", "21 - Yesterday's Peak Production Shared (L2)", "obis"),
+        ("1-65:2.29.2", "22 - Yesterday's Peak Production Shared (L3)", "obis"),
+        ("1-65:2.29.4", "23 - Yesterday's Peak Production Shared (L4)", "obis"),
+        ("1-65:2.29.9", "24 - Yesterday's Peak Remaining Production", "obis"),
 
-    if has_solar:
-        solar_sensors = [
-            ("p_04_yesterday_production", "Yesterday's Production", "energy"),
-            ("p_05_weekly_production", "Current Week Production", "energy"),
-            ("p_06_last_week_production", "Last Week's Production", "energy"),
-            ("p_07_monthly_production", "Current Month Production", "energy"),
-            ("p_08_previous_month_production", "Previous Month's Production", "energy"),
-            ("1-1:2.29.0", "Yesterday's Peak Active Production", "obis"),
-            ("1-1:4.29.0", "Yesterday's Peak Reactive Production", "obis"),
-            ("1-65:2.29.1", "Yesterday's Peak Production Shared (L1)", "obis"),
-            ("1-65:2.29.3", "Yesterday's Peak Production Shared (L2)", "obis"),
-            ("1-65:2.29.2", "Yesterday's Peak Production Shared (L3)", "obis"),
-            ("1-65:2.29.4", "Yesterday's Peak Production Shared (L4)", "obis"),
-            ("1-65:2.29.9", "Yesterday's Peak Remaining Production", "obis"),
-            ("p_09_yesterday_exported", "Yesterday's Exported Energy", "energy"),
-            ("p_12_yesterday_self_consumed", "Yesterday's Locally Used Energy", "energy"),
-            ("p_10_last_week_exported", "Last Week's Exported Energy", "energy"),
-            ("p_13_last_week_self_consumed", "Last Week's Locally Used Energy", "energy"),
-            ("p_15_monthly_exported", "Current Month's Exported Energy", "energy"),
-            ("p_16_monthly_self_consumed", "Current Month's Locally Used Energy", "energy"),
-            ("p_11_last_month_exported", "Last Month's Exported Energy", "energy"),
-            ("p_14_last_month_self_consumed", "Last Month's Locally Used Energy", "energy"),
-            ("s_p_l1_last_month", "Last Month's Production Shared (L1)", "energy"),
-            ("s_p_l2_last_month", "Last Month's Production Shared (L2)", "energy"),
-            ("s_p_l3_last_month", "Last Month's Production Shared (L3)", "energy"),
-            ("s_p_l4_last_month", "Last Month's Production Shared (L4)", "energy"),
-            ("s_p_rem_last_month", "Last Month's Remaining Production", "energy"),
-        ]
-        active_sensors.extend(solar_sensors)
+        # --- Aggregated Production Metrics ---
+        ("p_09_yesterday_exported", "25 - Yesterday's Exported Energy", "energy"),
+        ("p_12_yesterday_self_consumed", "26 - Yesterday's Locally Used Energy", "energy"),
+        ("p_10_last_week_exported", "27 - Last Week's Exported Energy", "energy"),
+        ("p_13_last_week_self_consumed", "28 - Last Week's Locally Used Energy", "energy"),
+        ("p_15_monthly_exported", "29 - Current Month's Exported Energy", "energy"),
+        ("p_16_monthly_self_consumed", "30 - Current Month's Locally Used Energy", "energy"),
+        ("p_11_last_month_exported", "31 - Last Month's Exported Energy", "energy"),
+        ("p_14_last_month_self_consumed", "32 - Last Month's Locally Used Energy", "energy"),
 
-    if has_water:
-        water_sensors = [
-            ("w_01_yesterday_consumption", "Yesterday's Water Consumption", "water"),
-            ("w_02_weekly_consumption", "Current Week's Water Consumption", "water"),
-            ("w_03_monthly_consumption", "Current Month's Water Consumption", "water"),
-        ]
-        active_sensors.extend(water_sensors)
+        # --- Last Month's Energy Sharing ---
+        ("s_c_l1_last_month", "33 - Last Month's Consumption Covered (L1)", "energy"),
+        ("s_c_l2_last_month", "34 - Last Month's Consumption Covered (L2)", "energy"),
+        ("s_c_l3_last_month", "35 - Last Month's Consumption Covered (L3)", "energy"),
+        ("s_c_l4_last_month", "36 - Last Month's Consumption Covered (L4)", "energy"),
+        ("s_c_rem_last_month", "37 - Last Month's Remaining Consumption", "energy"),
+        ("s_p_l1_last_month", "38 - Last Month's Production Shared (L1)", "energy"),
+        ("s_p_l2_last_month", "39 - Last Month's Production Shared (L2)", "energy"),
+        ("s_p_l3_last_month", "40 - Last Month's Production Shared (L3)", "energy"),
+        ("s_p_l4_last_month", "41 - Last Month's Production Shared (L4)", "energy"),
+        ("s_p_rem_last_month", "42 - Last Month's Remaining Production", "energy"),
 
-    if has_gas:
-        gas_sensors = [
-            ("g_10_yesterday_volume", "GAS - Yesterday's Volume (m³)", "gas_volume"),
-            ("g_11_weekly_volume", "GAS - Current Week's Volume (m³)", "gas_volume"),
-            ("g_12_last_week_volume", "GAS - Last Week's Volume (m³)", "gas_volume"),
-            ("g_13_monthly_volume", "GAS - Current Month's Volume (m³)", "gas_volume"),
-            ("g_14_last_month_volume", "GAS - Last Month's Volume (m³)", "gas_volume"),
-            ("g_20_yesterday_std_volume", "GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
-            ("g_21_weekly_std_volume", "GAS - Current Week's Standard Volume (Nm³)", "gas_std_volume"),
-            ("g_22_last_week_std_volume", "GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
-            ("g_23_monthly_std_volume", "GAS - Current Month's Standard Volume (Nm³)", "gas_std_volume"),
-            ("g_24_last_month_std_volume", "GAS - Last Month's Standard Volume (Nm³)", "gas_std_volume"),
-            ("7-1:99.23.15", "GAS - Yesterday's Peak Consumed Volume", "obis"),
-            ("7-1:99.23.17", "GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
-        ]
-        active_sensors.extend(gas_sensors)
+        # --- Gas Consumption ---
+        ("g_10_yesterday_volume", "43 - GAS - Yesterday's Volume (m³)", "gas_volume"),
+        ("g_11_weekly_volume", "44 - GAS - Current Week's Volume (m³)", "gas_volume"),
+        ("g_12_last_week_volume", "45 - GAS - Last Week's Volume (m³)", "gas_volume"),
+        ("g_13_monthly_volume", "46 - GAS - Current Month's Volume (m³)", "gas_volume"),
+        ("g_14_last_month_volume", "47 - GAS - Last Month's Volume (m³)", "gas_volume"),
+        ("g_20_yesterday_std_volume", "48 - GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_21_weekly_std_volume", "49 - GAS - Current Week's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_22_last_week_std_volume", "50 - GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_23_monthly_std_volume", "51 - GAS - Current Month's Standard Volume (Nm³)", "gas_std_volume"),
+        ("g_24_last_month_std_volume", "52 - GAS - Last Month's Standard Volume (Nm³)", "gas_std_volume"),
 
+        # --- OBIS Peak Gas Codes ---
+        ("7-1:99.23.15", "53 - GAS - Yesterday's Peak Consumed Volume", "obis"),
+        ("7-1:99.23.17", "54 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
+    ]
+
+    # Conditionally add the power usage over reference sensor
     if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
-        active_sensors.extend([
-            ("yesterdays_power_usage_over_reference", "Yesterday's Power Usage Over Reference", "energy"),
-            ("current_month_power_usage_over_reference", "Current Month's Power Usage Over Reference", "energy"),
-            ("last_month_power_usage_over_reference", "Last Month's Power Usage Over Reference", "energy"),
+        all_sensors_ordered.extend([
+            ("yesterdays_power_usage_over_reference", "55 - Yesterday's Power Usage Over Reference", "energy"),
+            ("current_month_power_usage_over_reference", "56 - Current Month's Power Usage Over Reference", "energy"),
+            ("last_month_power_usage_over_reference", "57 - Last Month's Power Usage Over Reference", "energy"),
         ])
 
+    # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []
-    _LOGGER.debug("Creating %d sensors based on user selection.", len(active_sensors))
-    for key, name, sensor_type in active_sensors:
+    _LOGGER.debug("Creating sensors in the following order:")
+    for key, name, sensor_type in all_sensors_ordered:
+        _LOGGER.debug(f"  - Key: {key}, Name: {name}, Type: {sensor_type}")
         if sensor_type == "energy":
+            # Default to energy sensor settings
             unit = "kWh"
             device_class = SensorDeviceClass.ENERGY
             icon = "mdi:chart-bar"
+
+            # Customize for gas sensors
             if key.startswith("g_"):
                 icon = "mdi:fire"
+
             sensors.append(
                 LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
             )
@@ -167,13 +156,6 @@ async def async_setup_entry(
             unit = "Nm³"
             device_class = SensorDeviceClass.GAS
             icon = "mdi:fire"
-            sensors.append(
-                LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
-            )
-        elif sensor_type == "water":
-            unit = "m³"
-            device_class = SensorDeviceClass.WATER
-            icon = "mdi:water"
             sensors.append(
                 LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
             )
@@ -249,8 +231,6 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
             manufacturer="Leneda",
             model="Smart Meter",
             sw_version=coordinator.version,
-            entry_type=None,
-            config_entry_id=coordinator.entry.entry_id,
         )
 
     def _get_base_meter_id(self, metering_point_id: str) -> str:
@@ -370,8 +350,6 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
             manufacturer="Leneda",
             model="Smart Meter",
             sw_version=coordinator.version,
-            entry_type=None,
-            config_entry_id=coordinator.entry.entry_id,
         )
 
     def _get_base_meter_id(self, metering_point_id: str) -> str:
