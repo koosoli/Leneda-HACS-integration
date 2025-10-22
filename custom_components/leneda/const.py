@@ -9,6 +9,10 @@ CONF_ENERGY_ID = "energy_id"
 CONF_METERING_POINT_ID = "metering_point_id"
 CONF_REFERENCE_POWER_ENTITY = "reference_power_entity"
 CONF_REFERENCE_POWER_STATIC = "reference_power_static"
+CONF_HAS_ENERGY = "has_energy"
+CONF_HAS_SOLAR = "has_solar"
+CONF_HAS_WATER = "has_water"
+CONF_HAS_GAS = "has_gas"
 
 OBIS_CODES = {
     "1-1:1.29.0": {"name": "Measured Active Consumption", "unit": "kW", "service_type": "electricity"},
