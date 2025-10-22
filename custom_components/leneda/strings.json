@@ -8,8 +8,12 @@
           "metering_point_id": "Metering Point ID",
           "api_key": "API Key",
           "energy_id": "Energy ID",
-          "reference_power_entity": "Reference Power Entity (optional)",
-          "reference_power_static": "Static Reference Power Value (optional, kW)"
+          "has_energy": "Is this an energy meter?",
+          "has_solar": "Does this meter include solar production?",
+          "has_water": "Is this a water meter?",
+          "has_gas": "Is this a gas meter?",
+          "reference_power_entity": "Reference Power Entity (optional, for advanced calculations)",
+          "reference_power_static": "Static Reference Power Value (optional, in kW)"
         }
       }
     },
