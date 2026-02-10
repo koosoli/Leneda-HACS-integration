@@ -1,10 +1,18 @@
 # ⚡ Leneda HACS Integration
 
+<p align="center">
+  <img src="logo/logo@2x.png" alt="Leneda Logo" width="300">
+</p>
+
+<p align="center">
+
 ![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge&logo=homeassistant)
 ![Version](https://img.shields.io/github/v/release/koosoli/Leneda-HACS-integration?style=for-the-badge&color=blue)
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Try_it_now!-00C853?style=for-the-badge)](https://koosoli.github.io/Leneda-HACS-integration/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support%20my%20work-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/koosoli)
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-koosoli-EA4AAA?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/koosoli)
+
+</p>
 
 > **The ultimate energy monitoring experience for Leneda smart meters in Luxembourg.**  
 > Completely rewritten from the ground up to offer an "Avant-Garde" visualization, robust device consolidation, and seamless integration.
