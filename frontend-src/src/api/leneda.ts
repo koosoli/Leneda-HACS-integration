@@ -3,7 +3,24 @@
  *
  * All fetch calls are relative (no host) — works inside the HA iframe
  * because the browser sends the HA session cookie automatically.
+ *
+ * When built with VITE_DEMO_MODE=true (GitHub Pages), all API calls
+ * return browser-side mock data instead. The demo module is tree-shaken
+ * away in normal builds.
  */
+
+// ── Demo mode (GitHub Pages) ────────────────────────────────────
+// Vite statically replaces import.meta.env.VITE_DEMO_MODE at build time.
+// Normal builds: undefined → dead code eliminated, demo-mock.ts not bundled.
+// GH Pages build: "true" → demo module is included.
+let _demo: typeof import("./demo-mock")["demo"] | null = null;
+async function getDemoApi() {
+  if (!_demo) {
+    _demo = (await import("./demo-mock")).demo;
+  }
+  return _demo;
+}
+const IS_DEMO = !!import.meta.env.VITE_DEMO_MODE;
 
 // ── Response types ──────────────────────────────────────────────
 
@@ -181,6 +198,7 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function fetchRangeData(range: TimeRange): Promise<RangeData> {
+  if (IS_DEMO) return (await getDemoApi()).fetchRangeData(range);
   return apiFetch<RangeData>(`/leneda_api/data?range=${range}`);
 }
 
@@ -188,6 +206,7 @@ export async function fetchCustomData(
   start: string,
   end: string
 ): Promise<CustomRangeData> {
+  if (IS_DEMO) return (await getDemoApi()).fetchCustomData(start, end);
   return apiFetch<CustomRangeData>(
     `/leneda_api/data/custom?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
   );
@@ -198,6 +217,7 @@ export async function fetchTimeseries(
   start?: string,
   end?: string
 ): Promise<TimeseriesResponse> {
+  if (IS_DEMO) return (await getDemoApi()).fetchTimeseries(obis, start, end);
   let url = `/leneda_api/data/timeseries?obis=${encodeURIComponent(obis)}`;
   if (start) url += `&start=${encodeURIComponent(start)}`;
   if (end) url += `&end=${encodeURIComponent(end)}`;
@@ -205,16 +225,19 @@ export async function fetchTimeseries(
 }
 
 export async function fetchSensors(): Promise<SensorsResponse> {
+  if (IS_DEMO) return (await getDemoApi()).fetchSensors();
   return apiFetch<SensorsResponse>("/leneda_api/sensors");
 }
 
 export async function fetchConfig(): Promise<BillingConfig> {
+  if (IS_DEMO) return (await getDemoApi()).fetchConfig();
   return apiFetch<BillingConfig>("/leneda_api/config");
 }
 
 export async function saveConfig(
   config: Partial<BillingConfig> | Record<string, number | string | boolean>
 ): Promise<void> {
+  if (IS_DEMO) return (await getDemoApi()).saveConfig(config);
   await apiFetch<{ status: string }>("/leneda_api/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -223,6 +246,7 @@ export async function saveConfig(
 }
 
 export async function resetConfig(): Promise<void> {
+  if (IS_DEMO) return (await getDemoApi()).resetConfig();
   await apiFetch<{ status: string }>("/leneda_api/config/reset", {
     method: "POST",
   });
@@ -231,6 +255,7 @@ export async function resetConfig(): Promise<void> {
 // ── Mode & credential functions (standalone support) ────────────
 
 export async function fetchMode(): Promise<AppMode> {
+  if (IS_DEMO) return (await getDemoApi()).fetchMode();
   try {
     return await apiFetch<AppMode>("/leneda_api/mode");
   } catch {
@@ -239,10 +264,12 @@ export async function fetchMode(): Promise<AppMode> {
 }
 
 export async function fetchCredentials(): Promise<Credentials> {
+  if (IS_DEMO) return (await getDemoApi()).fetchCredentials();
   return apiFetch<Credentials>("/leneda_api/credentials");
 }
 
 export async function saveCredentials(creds: Credentials): Promise<void> {
+  if (IS_DEMO) return (await getDemoApi()).saveCredentials(creds);
   await apiFetch<{ status: string }>("/leneda_api/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -253,6 +280,7 @@ export async function saveCredentials(creds: Credentials): Promise<void> {
 export async function testCredentials(
   creds: Credentials,
 ): Promise<{ success: boolean; message: string }> {
+  if (IS_DEMO) return (await getDemoApi()).testCredentials(creds);
   return apiFetch<{ success: boolean; message: string }>(
     "/leneda_api/credentials/test",
     {

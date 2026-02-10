@@ -37,6 +37,8 @@ jobs:
           # Set base URL to repository name for GitHub Pages
           # e.g. /Leneda-HACS-integration/
           VITE_BASE_URL: /${{ github.event.repository.name }}/
+          # Enable demo mode — API calls return browser-side mock data
+          VITE_DEMO_MODE: "true"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

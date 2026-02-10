@@ -1,4 +1,4 @@
-# ⚡ Leneda HACS Integration (v2.0)
+# ⚡ Leneda HACS Integration
 
 ![HACS Default](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge&logo=homeassistant)
 ![Version](https://img.shields.io/github/v/release/koosoli/Leneda-HACS-integration?style=for-the-badge&color=blue)
