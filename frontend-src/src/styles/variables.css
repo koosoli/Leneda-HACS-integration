@@ -1,0 +1,95 @@
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root {
+  /* Surface palette (refined dark theme) */
+  --clr-bg:            #0d1117;
+  --clr-surface:       #161b22;
+  --clr-surface-alt:   #1c2129;
+  --clr-surface-hover: #21262d;
+  --clr-border:        #30363d;
+  --clr-border-subtle: #21262d;
+  --clr-text:          #e6edf3;
+  --clr-text-secondary:#b1bac4;
+  --clr-muted:         #8b949e;
+
+  /* Brand accent — vibrant blue-purple energy gradient */
+  --clr-primary:       #58a6ff;
+  --clr-primary-hover: #79c0ff;
+  --clr-primary-muted: rgba(88, 166, 255, 0.15);
+  --clr-primary-glow:  rgba(88, 166, 255, 0.3);
+
+  /* Semantic */
+  --clr-success:       #3fb950;
+  --clr-success-muted: rgba(63, 185, 80, 0.15);
+  --clr-warning:       #d29922;
+  --clr-warning-muted: rgba(210, 153, 34, 0.15);
+  --clr-danger:        #f85149;
+  --clr-danger-muted:  rgba(248, 81, 73, 0.15);
+  --clr-info:          #58a6ff;
+
+  /* Energy-specific with muted backgrounds */
+  --clr-consumption:       #f85149;
+  --clr-consumption-muted: rgba(248, 81, 73, 0.12);
+  --clr-production:        #3fb950;
+  --clr-production-muted:  rgba(63, 185, 80, 0.12);
+  --clr-export:            #58a6ff;
+  --clr-export-muted:      rgba(88, 166, 255, 0.12);
+  --clr-self:              #bc8cff;
+  --clr-self-muted:        rgba(188, 140, 255, 0.12);
+  --clr-gas:               #d29922;
+  --clr-gas-muted:         rgba(210, 153, 34, 0.12);
+
+  /* Typography */
+  --font-sans:     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:     "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  --text-xs:       0.6875rem;
+  --text-sm:       0.8125rem;
+  --text-base:     0.875rem;
+  --text-lg:       1rem;
+  --text-xl:       1.25rem;
+  --text-2xl:      1.5rem;
+  --text-3xl:      2rem;
+  --text-4xl:      2.5rem;
+
+  /* Line heights */
+  --lh-tight:      1.15;
+  --lh-normal:     1.5;
+  --lh-relaxed:    1.75;
+
+  /* Spacing scale */
+  --sp-0:  0;
+  --sp-1:  0.25rem;
+  --sp-2:  0.5rem;
+  --sp-3:  0.75rem;
+  --sp-4:  1rem;
+  --sp-5:  1.25rem;
+  --sp-6:  1.5rem;
+  --sp-8:  2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+  --sp-16: 4rem;
+
+  /* Radius */
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs:  0 1px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md:  0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-lg:  0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  --shadow-xl:  0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --shadow-glow: 0 0 20px rgba(88, 166, 255, 0.15);
+
+  /* Transitions */
+  --ease:       cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:   cubic-bezier(0, 0, 0.2, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration:   150ms;
+  --duration-md: 250ms;
+  --duration-lg: 400ms;
+}

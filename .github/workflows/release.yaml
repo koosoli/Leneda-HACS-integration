@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release and Upload Assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required for creating releases
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Frontend
+        working-directory: ./frontend-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify Build Output
+        run: ls -R frontend-src/dist
+
+      - name: Zip Integration
+        run: |
+          cd custom_components/leneda
+          zip -r ../../leneda.zip . -x "**/*.pyc" -x "__pycache__"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: leneda.zip
+          generate_release_notes: true

@@ -4,8 +4,17 @@
   "config_flow": true,
   "documentation": "https://leneda.eu/en/docs/api-reference.html",
   "issue_tracker": "",
-  "codeowners": ["@koosoli"],
-  "requirements": [],
+  "codeowners": [
+    "@koosoli"
+  ],
+  "requirements": [
+    "aiofiles==24.1.0"
+  ],
   "iot_class": "cloud_polling",
-  "version": "0.3.0"
+  "version": "2.0.0",
+  "after_dependencies": [
+    "http",
+    "frontend",
+    "panel_iframe"
+  ]
 }

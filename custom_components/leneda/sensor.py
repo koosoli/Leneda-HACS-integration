@@ -27,6 +27,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_METERING_POINT_ID,
+    CONF_METER_HAS_GAS,
     DOMAIN,
     OBIS_CODES,
     GAS_OBIS_CODES,
@@ -47,7 +48,13 @@ async def async_setup_entry(
     coordinator: LenedaDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
     metering_point_id = entry.data[CONF_METERING_POINT_ID]
 
-    _LOGGER.debug("Setting up Leneda sensors for metering point %s", metering_point_id)
+    # Use coordinator's derived has_gas (from type-based config or legacy meter_has_gas)
+    meter_has_gas = coordinator.has_gas
+    _LOGGER.debug(
+        "Setting up Leneda sensors for metering point %s (gas=%s)",
+        metering_point_id,
+        meter_has_gas,
+    )
 
     all_sensors_ordered = [
         # --- Energy Consumption ---
@@ -102,22 +109,26 @@ async def async_setup_entry(
         ("s_p_l4_last_month", "41 - Last Month's Production Shared (L4)", "energy"),
         ("s_p_rem_last_month", "42 - Last Month's Remaining Production", "energy"),
 
-        # --- Gas Consumption ---
-        ("g_10_yesterday_volume", "43 - GAS - Yesterday's Volume (m³)", "gas_volume"),
-        ("g_11_weekly_volume", "44 - GAS - Current Week's Volume (m³)", "gas_volume"),
-        ("g_12_last_week_volume", "45 - GAS - Last Week's Volume (m³)", "gas_volume"),
-        ("g_13_monthly_volume", "46 - GAS - Current Month's Volume (m³)", "gas_volume"),
-        ("g_14_last_month_volume", "47 - GAS - Last Month's Volume (m³)", "gas_volume"),
-        ("g_20_yesterday_std_volume", "48 - GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_21_weekly_std_volume", "49 - GAS - Current Week's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_22_last_week_std_volume", "50 - GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_23_monthly_std_volume", "51 - GAS - Current Month's Standard Volume (Nm³)", "gas_std_volume"),
-        ("g_24_last_month_std_volume", "52 - GAS - Last Month's Standard Volume (Nm³)", "gas_std_volume"),
-
-        # --- OBIS Peak Gas Codes ---
-        ("7-1:99.23.15", "53 - GAS - Yesterday's Peak Consumed Volume", "obis"),
-        ("7-1:99.23.17", "54 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
     ]
+
+    # --- Gas Consumption (only if meter has gas) ---
+    if meter_has_gas:
+        all_sensors_ordered.extend([
+            ("g_10_yesterday_volume", "43 - GAS - Yesterday's Volume (m³)", "gas_volume"),
+            ("g_11_weekly_volume", "44 - GAS - Current Week's Volume (m³)", "gas_volume"),
+            ("g_12_last_week_volume", "45 - GAS - Last Week's Volume (m³)", "gas_volume"),
+            ("g_13_monthly_volume", "46 - GAS - Current Month's Volume (m³)", "gas_volume"),
+            ("g_14_last_month_volume", "47 - GAS - Last Month's Volume (m³)", "gas_volume"),
+            ("g_20_yesterday_std_volume", "48 - GAS - Yesterday's Standard Volume (Nm³)", "gas_std_volume"),
+            ("g_21_weekly_std_volume", "49 - GAS - Current Week's Standard Volume (Nm³)", "gas_std_volume"),
+            ("g_22_last_week_std_volume", "50 - GAS - Last Week's Standard Volume (Nm³)", "gas_std_volume"),
+            ("g_23_monthly_std_volume", "51 - GAS - Current Month's Standard Volume (Nm³)", "gas_std_volume"),
+            ("g_24_last_month_std_volume", "52 - GAS - Last Month's Standard Volume (Nm³)", "gas_std_volume"),
+
+            # --- OBIS Peak Gas Codes ---
+            ("7-1:99.23.15", "53 - GAS - Yesterday's Peak Consumed Volume", "obis"),
+            ("7-1:99.23.17", "54 - GAS - Yesterday's Peak Consumed Standard Volume", "obis"),
+        ])
 
     # Conditionally add the power usage over reference sensor
     if coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
@@ -192,8 +203,6 @@ class LenedaSensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorEntity)
         self._attr_name = details["name"]
         self._attr_unique_id = f"{metering_point_id}_{obis_code}_v3"
         self._attr_native_unit_of_measurement = details["unit"]
-        # Set translation key for proper dashboard integration
-        self._attr_translation_key = "leneda_sensor"
 
         # Set device class, state class, and icon based on OBIS code and unit
         if self._obis_code == "7-20:99.33.17":
@@ -342,8 +351,6 @@ class LenedaEnergySensor(CoordinatorEntity[LenedaDataUpdateCoordinator], SensorE
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_icon = icon
-        # Set translation key for proper dashboard integration
-        self._attr_translation_key = "leneda_energy_sensor"
 
         # Extract base metering point ID for device consolidation
         base_meter_id = self._get_base_meter_id(metering_point_id)

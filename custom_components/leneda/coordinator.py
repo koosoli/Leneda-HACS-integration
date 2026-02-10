@@ -31,26 +31,20 @@ from .const import (
     OBIS_CODES,
     CONF_REFERENCE_POWER_ENTITY,
     CONF_REFERENCE_POWER_STATIC,
+    CONF_METERING_POINT_1_TYPES,
+    EXTRA_METER_SLOTS,
+    CONF_METER_HAS_GAS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_integration_version(hass: HomeAssistant) -> str:
-    """Return the version of the Leneda integration."""
-    try:
-        manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
-        with open(manifest_path) as manifest_file:
-            manifest = json.load(manifest_file)
-        return manifest.get("version", "unknown")
-    except (FileNotFoundError, json.JSONDecodeError):
-        return "unknown"
 
 
 class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
     """A coordinator to fetch data from the Leneda API."""
 
-    def __init__(self, hass: HomeAssistant, api_client: LenedaApiClient, metering_point_id: str, entry: dict) -> None:
+    def __init__(self, hass: HomeAssistant, api_client: LenedaApiClient, metering_point_id: str, entry: dict, version: str = "unknown") -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
@@ -61,7 +55,65 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
         self.api_client = api_client
         self.metering_point_id = metering_point_id
         self.entry = entry
-        self.version = get_integration_version(hass)
+        self.version = version
+
+        # ── Build per-purpose routing table from meter type config ──
+        # Each meter can be tagged as consumption, production, gas (or any combo)
+        meters = [
+            (metering_point_id, entry.data.get(CONF_METERING_POINT_1_TYPES, ["consumption"])),
+        ]
+        for id_key, types_key in EXTRA_METER_SLOTS:
+            mid = (entry.data.get(id_key) or "").strip()
+            if mid:
+                meters.append((mid, entry.data.get(types_key, [])))
+
+        # Default all to primary meter, then override per type
+        self.consumption_meter = metering_point_id
+        self.production_meter = metering_point_id
+        self.gas_meter = metering_point_id
+
+        # Collect ALL meters of each type (for multi-production-meter summing)
+        self.production_meters: list[str] = []
+
+        for mid, types in meters:
+            if "consumption" in types:
+                self.consumption_meter = mid
+            if "production" in types:
+                self.production_meter = mid
+                self.production_meters.append(mid)
+            if "gas" in types:
+                self.gas_meter = mid
+
+        # Ensure at least the primary meter is in the production list
+        if not self.production_meters:
+            self.production_meters = [self.production_meter]
+        # Keep production_meter pointing to the FIRST production meter so that
+        # _meter_for_obis() returns [0] and extra tasks cover [1:].
+        self.production_meter = self.production_meters[0]
+
+        # Derive whether gas is available (new type system OR legacy meter_has_gas)
+        self.has_gas = (
+            any("gas" in types for _, types in meters)
+            or entry.data.get(CONF_METER_HAS_GAS, False)
+        )
+
+        # Store all configured meters for frontend display
+        self.meters = meters
+
+    def _meter_for_obis(self, obis_code: str) -> str:
+        """Return the correct metering point ID for a given OBIS code.
+
+        Production codes (1-1:2.*, 1-1:4.*, 1-65:2.*) → production meter
+        Gas codes (7-*) → gas meter
+        Everything else → consumption meter
+        """
+        if obis_code.startswith("7-"):
+            return self.gas_meter
+        if (obis_code.startswith("1-1:2.") or
+            obis_code.startswith("1-1:4.") or
+            obis_code.startswith("1-65:2.")):
+            return self.production_meter
+        return self.consumption_meter
 
     def _calculate_power_overage(self, items: list[dict], ref_power_kw: float) -> float:
         """Calculate total kWh consumed over a reference power."""
@@ -97,6 +149,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 last_week_end_dt = week_start_dt - timedelta(microseconds=1)
 
                 month_start_dt = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                # If today is the 1st, ensure current month requests don't have start > end
+                effective_month_end = yesterday_end_dt if yesterday_end_dt > month_start_dt else now
+                
                 end_of_last_month = month_start_dt - timedelta(microseconds=1)
                 start_of_last_month = end_of_last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -117,7 +172,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 non_gas_obis_codes = {k: v for k, v in OBIS_CODES.items() if not k.startswith("7-")}
                 obis_tasks = [
                     self.api_client.async_get_metering_data(
-                        self.metering_point_id, obis_code, yesterday_start_dt, yesterday_end_dt
+                        self._meter_for_obis(obis_code), obis_code, yesterday_start_dt, yesterday_end_dt
                     ) for obis_code in non_gas_obis_codes
                 ]
 
@@ -128,11 +183,11 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     power_over_ref_tasks = [
                         # Current month (so far)
                         self.api_client.async_get_metering_data(
-                            self.metering_point_id, CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
+                            self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
                         ),
                         # Previous month
                         self.api_client.async_get_metering_data(
-                            self.metering_point_id, CONSUMPTION_CODE, start_of_last_month, end_of_last_month
+                            self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, start_of_last_month, end_of_last_month
                         ),
                     ]
 
@@ -141,53 +196,79 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 aggregated_tasks = [
                     # Yesterday
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, yesterday_start_dt, yesterday_end_dt
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, yesterday_start_dt, yesterday_end_dt
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, EXPORT_CODE, yesterday_start_dt, yesterday_end_dt
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, yesterday_start_dt, yesterday_end_dt
                     ),
                     # Weekly (current week so far)
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, week_start_dt, yesterday_end_dt
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, week_start_dt, yesterday_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, week_start_dt, yesterday_end_dt
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, week_start_dt, yesterday_end_dt
+                    ),
+                    self.api_client.async_get_aggregated_metering_data(
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, week_start_dt, yesterday_end_dt
                     ),
                     # Last Week
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, last_week_start_dt, last_week_end_dt
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, last_week_start_dt, last_week_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, last_week_start_dt, last_week_end_dt
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, last_week_start_dt, last_week_end_dt
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, EXPORT_CODE, last_week_start_dt, last_week_end_dt
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, last_week_start_dt, last_week_end_dt
                     ),
                     # Monthly (current month so far)
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, month_start_dt, effective_month_end
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, month_start_dt, yesterday_end_dt
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, month_start_dt, effective_month_end
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, EXPORT_CODE, month_start_dt, yesterday_end_dt
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, month_start_dt, effective_month_end
                     ),
                     # Previous Month
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, CONSUMPTION_CODE, start_of_last_month, end_of_last_month
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, start_of_last_month, end_of_last_month
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, PRODUCTION_CODE, start_of_last_month, end_of_last_month
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, start_of_last_month, end_of_last_month
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, EXPORT_CODE, start_of_last_month, end_of_last_month
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, start_of_last_month, end_of_last_month
                     ),
                 ]
-                
+
+                # Extra tasks for additional production meters (multi-solar summing)
+                extra_prod_tasks = []
+                extra_prod_map = []  # maps each extra task result to its data key
+                if len(self.production_meters) > 1:
+                    _LOGGER.debug("Setting up extra tasks for %d additional production meters", len(self.production_meters) - 1)
+                    period_ranges = [
+                        (yesterday_start_dt, yesterday_end_dt, "p_04_yesterday_production", "p_09_yesterday_exported"),
+                        (week_start_dt, yesterday_end_dt, "p_05_weekly_production", "p_17_weekly_exported"),
+                        (last_week_start_dt, last_week_end_dt, "p_06_last_week_production", "p_10_last_week_exported"),
+                        (month_start_dt, effective_month_end, "p_07_monthly_production", "p_15_monthly_exported"),
+                        (start_of_last_month, end_of_last_month, "p_08_previous_month_production", "p_11_last_month_exported"),
+                    ]
+                    for meter_id in self.production_meters[1:]:
+                        for start, end, prod_key, export_key in period_ranges:
+                            extra_prod_tasks.append(self.api_client.async_get_aggregated_metering_data(
+                                meter_id, PRODUCTION_CODE, start, end
+                            ))
+                            extra_prod_map.append(prod_key)
+                            extra_prod_tasks.append(self.api_client.async_get_aggregated_metering_data(
+                                meter_id, EXPORT_CODE, start, end
+                            ))
+                            extra_prod_map.append(export_key)
+
                 # Tasks for fetching detailed 15-min gas data for manual aggregation
                 _LOGGER.debug("Setting up tasks for detailed gas data...")
                 gas_tasks = {}
@@ -211,18 +292,18 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 for key, (code, start, end) in gas_definitions.items():
                     gas_tasks[key] = self.api_client.async_get_metering_data(
-                        self.metering_point_id, code, start, end
+                        self._meter_for_obis(code), code, start, end
                     )
 
                 # Add tasks for sharing codes for last month
                 for key, code in SHARING_CODES.items():
                     aggregated_tasks.append(self.api_client.async_get_aggregated_metering_data(
-                        self.metering_point_id, code, start_of_last_month, end_of_last_month
+                        self._meter_for_obis(code), code, start_of_last_month, end_of_last_month
                     ))
 
                 aggregated_keys = [
                     "c_04_yesterday_consumption", "p_04_yesterday_production", "p_09_yesterday_exported",
-                    "c_05_weekly_consumption", "p_05_weekly_production",
+                    "c_05_weekly_consumption", "p_05_weekly_production", "p_17_weekly_exported",
                     "c_06_last_week_consumption", "p_06_last_week_production", "p_10_last_week_exported",
                     "c_07_monthly_consumption", "p_07_monthly_production", "p_15_monthly_exported",
                     "c_08_previous_month_consumption", "p_08_previous_month_production", "p_11_last_month_exported",
@@ -250,7 +331,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # To preserve order for slicing, we'll keep aggregated_tasks separate for now
                 # In a future refactor, we could move all to a dictionary-based system
 
-                task_list = obis_tasks + aggregated_tasks + power_over_ref_tasks + list(all_tasks.values())
+                task_list = obis_tasks + aggregated_tasks + power_over_ref_tasks + list(all_tasks.values()) + extra_prod_tasks
                 results = await asyncio.gather(*task_list, return_exceptions=True)
                 _LOGGER.debug("All API tasks gathered.")
 
@@ -259,7 +340,9 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 power_over_ref_results = results[len(obis_tasks) + len(aggregated_tasks):len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks)]
 
                 # Map results back to their keys for gas tasks
-                gas_results_dict = dict(zip(all_tasks.keys(), results[len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks):]))
+                gas_start = len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks)
+                gas_end = gas_start + len(all_tasks)
+                gas_results_dict = dict(zip(all_tasks.keys(), results[gas_start:gas_end]))
 
                 data = self.data.copy() if self.data else {}
 
@@ -323,12 +406,15 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug(f"Processing aggregated data for {key}, result: {result}")
                         series = result.get("aggregatedTimeSeries")
                         if series:
-                            item = series[0]
                             if key.startswith("c_02_") or key.startswith("p_02_"):  # Hourly - get latest hour
                                 item = series[-1]
+                                val = item.get("value")
+                            else:
+                                # For day/week/month/year, we sum all aggregated items (sub-sums)
+                                val = sum(item.get("value", 0) for item in series if item.get("value") is not None)
 
-                            if item and item.get("value") is not None:
-                                data[key] = item["value"]
+                            if val is not None:
+                                data[key] = val
                                 _LOGGER.debug(f"Processed aggregated data for {key}: {data[key]}")
                             else:
                                 if key not in data or data[key] is None:
@@ -380,6 +466,78 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         data.setdefault(key, 0.0) # Set to 0 if no data
 
 
+                # Sum production/export data from additional production meters
+                if extra_prod_tasks:
+                    extra_start = len(obis_tasks) + len(aggregated_tasks) + len(power_over_ref_tasks) + len(all_tasks)
+                    extra_results = results[extra_start:]
+                    for key, result in zip(extra_prod_map, extra_results):
+                        if isinstance(result, dict):
+                            series = result.get("aggregatedTimeSeries")
+                            if series and series[0].get("value") is not None:
+                                current = data.get(key, 0.0) or 0.0
+                                data[key] = round(current + series[0]["value"], 4)
+                                _LOGGER.debug("Added extra production meter data for %s: %s", key, data[key])
+                        elif isinstance(result, Exception):
+                            _LOGGER.error("Error fetching extra production data for %s: %s", key, result)
+
+                # ─── Process Shared Energy (All Ranges) ───
+                # We need to fetch and sum layers 1-4 for both Sent (Production Shared) and Received (Consumption Shared)
+                # for every supported time range: Yesterday, Week, Last Week, Month, Last Month.
+                
+                # Helper to perform ad-hoc fetches for sharing layers (since we didn't add them to the main task list earlier to keep it clean)
+                # This adds some serial overhead but keeps the logic isolated and safe.
+                # Given update_interval is 1h, this is acceptable.
+                
+                async def _fetch_sum_sharing(meter_id, code_prefix, start, end):
+                    """Fetch layers 1-4 and return the sum."""
+                    layers = ["1", "2", "3", "4"]
+                    tasks = [
+                        self.api_client.async_get_aggregated_metering_data(
+                            meter_id, f"{code_prefix}.{l}", start, end
+                        ) for l in layers
+                    ]
+                    res = await asyncio.gather(*tasks, return_exceptions=True)
+                    total = 0.0
+                    for r in res:
+                        if isinstance(r, dict) and r.get("aggregatedTimeSeries"):
+                            total += sum(item.get("value", 0) for item in r["aggregatedTimeSeries"] if item.get("value") is not None)
+                    return total
+
+                # Consumption meter for Shared With Me
+                c_meter = self._meter_for_obis("1-1:1.29.0")
+                
+                # Production meter(s) for Shared (Sent)
+                # Note: If multiple production meters exist, we should sum them all.
+                p_meters = self.production_meters
+
+                sharing_periods = [
+                    ("yesterday", yesterday_start_dt, yesterday_end_dt),
+                    ("weekly", week_start_dt, yesterday_end_dt),
+                    ("last_week", last_week_start_dt, last_week_end_dt),
+                    ("monthly", month_start_dt, effective_month_end),
+                    ("last_month", start_of_last_month, end_of_last_month),
+                ]
+
+                for p_name, p_start, p_end in sharing_periods:
+                    # 1. Received (Shared With Me) - prefix 1-65:1.29
+                    try:
+                        received_val = await _fetch_sum_sharing(c_meter, "1-65:1.29", p_start, p_end)
+                        data[f"s_received_{p_name}"] = round(received_val, 4)
+                    except Exception as e:
+                        _LOGGER.error(f"Error calculating Shared With Me for {p_name}: {e}")
+                        data[f"s_received_{p_name}"] = 0.0
+
+                    # 2. Sent (Shared) - prefix 1-65:2.29
+                    # Sum across all production meters
+                    try:
+                        sent_total = 0.0
+                        for pm in p_meters:
+                            sent_total += await _fetch_sum_sharing(pm, "1-65:2.29", p_start, p_end)
+                        data[f"s_sent_{p_name}"] = round(sent_total, 4)
+                    except Exception as e:
+                        _LOGGER.error(f"Error calculating Shared (Sent) for {p_name}: {e}")
+                        data[f"s_sent_{p_name}"] = 0.0
+
                 # Calculate self-consumption values
                 try:
                     # Yesterday
@@ -393,6 +551,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     export_last_week = data.get("p_10_last_week_exported")
                     if prod_last_week is not None and export_last_week is not None:
                         data["p_13_last_week_self_consumed"] = round(prod_last_week - export_last_week, 4)
+
+                    # This Week
+                    prod_weekly = data.get("p_05_weekly_production")
+                    export_weekly = data.get("p_17_weekly_exported")
+                    if prod_weekly is not None and export_weekly is not None:
+                        data["p_18_weekly_self_consumed"] = round(prod_weekly - export_weekly, 4)
 
                     # Current Month
                     prod_monthly = data.get("p_07_monthly_production")
