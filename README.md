@@ -37,7 +37,19 @@ The integration includes a standalone dashboard panel that provides:
 
 ---
 
-## 📦 Installation
+## � Screenshots
+
+| Dashboard | Energy Profile |
+|:-:|:-:|
+| ![Dashboard](screenshots/dashboard.png) | ![Energy Profile Graph](screenshots/energyprofilegraph.png) |
+
+| Invoice Estimate & Exceedance Warning | Cost Settings |
+|:-:|:-:|
+| ![Invoice Estimate](screenshots/invoiceestimateandexeedancewarning.png) | ![Cost Settings](screenshots/costsettings.png) |
+
+---
+
+## �📦 Installation
 
 ### Option 1: HACS (Recommended)
 1. Open **HACS** in Home Assistant.
