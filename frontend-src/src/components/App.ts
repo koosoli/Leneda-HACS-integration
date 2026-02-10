@@ -97,7 +97,11 @@ export class LenedaApp {
         this.state.credentials = localCreds;
       }
 
-      if (!modeInfo.configured && !localCreds) {
+      // In demo mode (GitHub Pages), always proceed to dashboard —
+      // demo-mock.ts returns mock data when no credentials are saved.
+      const isDemo = !!import.meta.env.VITE_DEMO_MODE;
+
+      if (!isDemo && !modeInfo.configured && !localCreds) {
         // Not configured — send user to Settings to enter credentials
         this.state.tab = "settings";
         this.state.loading = false;
@@ -148,7 +152,6 @@ export class LenedaApp {
     }
   }
 
-
   private async changeRange(range: TimeRange): Promise<void> {
     this.preZoomRange = null;
     this.state.range = range;
@@ -171,10 +174,10 @@ export class LenedaApp {
     this.state.loading = true;
     this.render();
     try {
-      const { fetchRangeData } = await import("../api/leneda");
       this.state.rangeData = await fetchRangeData(range);
     } catch (e) {
-      this.state.error = e instanceof Error ? e.message : "Failed to load data";
+      this.state.error =
+        e instanceof Error ? e.message : "Failed to load data";
     } finally {
       this.state.loading = false;
       this.render();
@@ -239,7 +242,7 @@ export class LenedaApp {
     if (loading && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => { })}
+          ${renderNavBar(tab, (_t) => {})}
           <main class="main-content">
             <div class="loading-state">
               <div class="spinner"></div>
@@ -255,7 +258,7 @@ export class LenedaApp {
     if (error && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => { })}
+          ${renderNavBar(tab, (_t) => {})}
           <main class="main-content">
             <div class="error-state">
               <h2>Connection Error</h2>
@@ -503,15 +506,7 @@ export class LenedaApp {
     if (this.state.mode === "ha") {
       const datalist = this.root.querySelector("#ha-entity-list") as HTMLDataListElement | null;
       if (datalist) {
-        // Include auth token for HA mode
-        const headers: Record<string, string> = {};
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const el = (window as any).parent?.document?.querySelector("home-assistant");
-          const t = el?.hass?.auth?.data?.access_token;
-          if (t) headers["Authorization"] = `Bearer ${t}`;
-        } catch { /* standalone mode — no parent hass */ }
-        fetch("/leneda_api/ha-entities", { headers, credentials: "include" })
+        fetch("/api/leneda/ha-entities")
           .then((r) => r.ok ? r.json() as Promise<{ entities: string[] }> : Promise.resolve({ entities: [] }))
           .then(({ entities }) => {
             datalist.innerHTML = entities
@@ -803,15 +798,6 @@ export class LenedaApp {
       case "last_month": {
         const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        return { start: fmt(start), end: fmt(end) };
-      }
-      case "this_year": {
-        const start = new Date(now.getFullYear(), 0, 1);
-        return { start: fmt(start), end: fmt(now) };
-      }
-      case "last_year": {
-        const start = new Date(now.getFullYear() - 1, 0, 1);
-        const end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
         return { start: fmt(start), end: fmt(end) };
       }
       default: {
