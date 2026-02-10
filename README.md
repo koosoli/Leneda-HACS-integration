@@ -78,4 +78,3 @@ Or sponsor me on GitHub: [**github.com/sponsors/koosoli**](https://github.com/sp
 
 ## Credits
 Authored by **[@koosoli](https://github.com/koosoli)**.  
-Licensed under MIT.
