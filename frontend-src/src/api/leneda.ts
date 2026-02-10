@@ -5,6 +5,10 @@
  * because the browser sends the HA session cookie automatically.
  */
 
+import { mockApi } from "./mock-client";
+
+const IS_DEMO = window.location.hostname.includes("github.io") || window.location.hostname.includes("demo");
+
 // ── Response types ──────────────────────────────────────────────
 
 export interface RangeData {
@@ -23,8 +27,6 @@ export interface RangeData {
   shared_with_me?: number;
   /** Cumulative kWh consumed above the reference power (sum of 15-min exceedances × 0.25 h) */
   exceedance_kwh?: number;
-  start?: string;
-  end?: string;
 }
 
 export interface CustomRangeData {
@@ -129,8 +131,6 @@ export type TimeRange =
   | "last_week"
   | "this_month"
   | "last_month"
-  | "this_year"
-  | "last_year"
   | "custom";
 
 export interface AppMode {
@@ -144,36 +144,10 @@ export interface Credentials {
   meters: MeterConfig[];
 }
 
-// ── HA Auth Token Extraction ────────────────────────────────────
-
-/**
- * Extract the Home Assistant access token from the parent frame.
- * Works because panel_iframe is same-origin with HA frontend.
- */
-function getHassToken(): string | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hassEl = (window as any).parent?.document?.querySelector("home-assistant");
-    return hassEl?.hass?.auth?.data?.access_token ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // ── API functions ───────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const token = getHassToken();
-  const headers: Record<string, string> = {
-    ...(init?.headers as Record<string, string>),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const options: RequestInit = {
-    ...init,
-    credentials: "include",
-    headers,
-  };
-  const resp = await fetch(url, options);
+  const resp = await fetch(url, init);
   if (!resp.ok) {
     throw new Error(`API ${resp.status}: ${resp.statusText}`);
   }
@@ -181,15 +155,17 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function fetchRangeData(range: TimeRange): Promise<RangeData> {
-  return apiFetch<RangeData>(`/leneda_api/data?range=${range}`);
+  if (IS_DEMO) return mockApi.getRangeData(range);
+  return apiFetch<RangeData>(`/api/leneda/data?range=${range}`);
 }
 
 export async function fetchCustomData(
   start: string,
   end: string
 ): Promise<CustomRangeData> {
+  if (IS_DEMO) return mockApi.getCustomData(start, end) as unknown as CustomRangeData;
   return apiFetch<CustomRangeData>(
-    `/leneda_api/data/custom?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+    `/api/leneda/data/custom?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
   );
 }
 
@@ -198,24 +174,28 @@ export async function fetchTimeseries(
   start?: string,
   end?: string
 ): Promise<TimeseriesResponse> {
-  let url = `/leneda_api/data/timeseries?obis=${encodeURIComponent(obis)}`;
+  if (IS_DEMO) return mockApi.getTimeseries(obis, start, end);
+  let url = `/api/leneda/data/timeseries?obis=${encodeURIComponent(obis)}`;
   if (start) url += `&start=${encodeURIComponent(start)}`;
   if (end) url += `&end=${encodeURIComponent(end)}`;
   return apiFetch<TimeseriesResponse>(url);
 }
 
 export async function fetchSensors(): Promise<SensorsResponse> {
-  return apiFetch<SensorsResponse>("/leneda_api/sensors");
+  if (IS_DEMO) return mockApi.getSensors();
+  return apiFetch<SensorsResponse>("/api/leneda/sensors");
 }
 
 export async function fetchConfig(): Promise<BillingConfig> {
-  return apiFetch<BillingConfig>("/leneda_api/config");
+  if (IS_DEMO) return mockApi.getConfig();
+  return apiFetch<BillingConfig>("/api/leneda/config");
 }
 
 export async function saveConfig(
   config: Partial<BillingConfig> | Record<string, number | string | boolean>
 ): Promise<void> {
-  await apiFetch<{ status: string }>("/leneda_api/config", {
+  if (IS_DEMO) return mockApi.saveConfig(config);
+  await apiFetch<{ status: string }>("/api/leneda/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
@@ -223,7 +203,8 @@ export async function saveConfig(
 }
 
 export async function resetConfig(): Promise<void> {
-  await apiFetch<{ status: string }>("/leneda_api/config/reset", {
+  if (IS_DEMO) return mockApi.resetConfig();
+  await apiFetch<{ status: string }>("/api/leneda/config/reset", {
     method: "POST",
   });
 }
@@ -231,19 +212,22 @@ export async function resetConfig(): Promise<void> {
 // ── Mode & credential functions (standalone support) ────────────
 
 export async function fetchMode(): Promise<AppMode> {
+  if (IS_DEMO) return mockApi.getMode();
   try {
-    return await apiFetch<AppMode>("/leneda_api/mode");
+    return await apiFetch<AppMode>("/api/leneda/mode");
   } catch {
     return { mode: "standalone", configured: false };
   }
 }
 
 export async function fetchCredentials(): Promise<Credentials> {
-  return apiFetch<Credentials>("/leneda_api/credentials");
+  if (IS_DEMO) return mockApi.getCredentials();
+  return apiFetch<Credentials>("/api/leneda/credentials");
 }
 
 export async function saveCredentials(creds: Credentials): Promise<void> {
-  await apiFetch<{ status: string }>("/leneda_api/credentials", {
+  if (IS_DEMO) return mockApi.saveCredentials(creds);
+  await apiFetch<{ status: string }>("/api/leneda/credentials", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(creds),
@@ -253,8 +237,9 @@ export async function saveCredentials(creds: Credentials): Promise<void> {
 export async function testCredentials(
   creds: Credentials,
 ): Promise<{ success: boolean; message: string }> {
+  if (IS_DEMO) return mockApi.testCredentials(creds);
   return apiFetch<{ success: boolean; message: string }>(
-    "/leneda_api/credentials/test",
+    "/api/leneda/credentials/test",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
