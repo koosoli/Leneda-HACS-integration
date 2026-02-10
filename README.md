@@ -58,7 +58,13 @@ The integration includes a standalone dashboard panel that provides:
 ---
 
 ## �📦 Installation
+### Option 0: No Installation — Use it Online! 🌐
+No Home Assistant? No problem. The dashboard is available as a **hosted web app**:
 
+1. Go to **[koosoli.github.io/Leneda-HACS-integration](https://koosoli.github.io/Leneda-HACS-integration/)**.
+2. Browse the dashboard with demo data right away.
+3. To see **your real energy data**, open **Settings** and enter your Leneda API credentials (API Key, Energy ID, and Metering Point IDs).
+4. Your credentials are stored locally in your browser — they are never sent to any third-party server.
 ### Option 1: HACS (Recommended)
 1. Open **HACS** in Home Assistant.
 2. Go to **Integrations**.
