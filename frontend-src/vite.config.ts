@@ -7,7 +7,7 @@ export default defineConfig(({ command }) => {
   return {
     // In production, assets must be served from /leneda-panel/static/ (matches panel.py).
     // In dev, Vite's root "/" is fine — no iframe rewriting needed.
-    // GitHub Pages deployment uses VITE_BASE_URL env var.
+    // If VITE_BASE_URL is set (e.g. for GitHub Pages), use that.
     base: process.env.VITE_BASE_URL || (isDev ? "/" : "/leneda-panel/static/"),
 
     build: {
@@ -27,12 +27,12 @@ export default defineConfig(({ command }) => {
     // Dev-only: load the mock/live API plugin
     plugins: isDev
       ? [
-        // Lazy-load to avoid importing dev deps in production builds
-        (async () => {
-          const { lenedaDevApi } = await import("./dev/dev-server-plugin");
-          return lenedaDevApi();
-        })() as any,
-      ]
+          // Lazy-load to avoid importing dev deps in production builds
+          (async () => {
+            const { lenedaDevApi } = await import("./dev/dev-server-plugin");
+            return lenedaDevApi();
+          })() as any,
+        ]
       : [],
 
     resolve: {
