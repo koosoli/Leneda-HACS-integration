@@ -242,7 +242,7 @@ export class LenedaApp {
     if (loading && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => {})}
+          ${renderNavBar(tab, (_t) => { })}
           <main class="main-content">
             <div class="loading-state">
               <div class="spinner"></div>
@@ -258,7 +258,7 @@ export class LenedaApp {
     if (error && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => {})}
+          ${renderNavBar(tab, (_t) => { })}
           <main class="main-content">
             <div class="error-state">
               <h2>Connection Error</h2>
@@ -563,10 +563,14 @@ export class LenedaApp {
       // Build feed_in_rates array from collected per-meter fields
       for (const idx of Object.keys(rateMap).sort()) {
         const rm = rateMap[idx];
+        const mode = rm.mode ?? "fixed";
+        // If fixed mode, use 'tariff'. If sensor mode, prefer 'fallback_tariff' (renamed in Settings.ts)
+        const effectiveTariffStr = mode === "sensor" ? (rm.fallback_tariff ?? rm.tariff) : rm.tariff;
+
         feedInRates.push({
           meter_id: rm.meter_id ?? "",
-          mode: rm.mode ?? "fixed",
-          tariff: parseFloat(rm.tariff ?? "0.08") || 0.08,
+          mode: mode,
+          tariff: parseFloat(effectiveTariffStr ?? "0.08") || 0.08,
           sensor_entity: rm.sensor_entity ?? "",
         });
       }
@@ -610,7 +614,7 @@ export class LenedaApp {
   private async initChart(canvas: HTMLCanvasElement): Promise<void> {
     try {
       const { renderEnergyChart } = await import("./Charts");
-      const { fetchTimeseries } = await import("../api/leneda");
+      const { fetchTimeseries, fetchPerMeterTimeseries } = await import("../api/leneda");
 
       // Compute date range for the currently selected period
       const { start, end } = this.getDateRangeISO();
@@ -623,9 +627,26 @@ export class LenedaApp {
 
       const referencePowerKw = this.state.config?.reference_power_kw ?? 0;
 
+      // Check if multiple production meters exist — if so, fetch per-meter data
+      const productionMeters = (this.state.config?.meters ?? []).filter(
+        (m) => m.types.includes("production"),
+      );
+      let perMeterProduction = undefined;
+      if (productionMeters.length > 1) {
+        try {
+          const perMeterResp = await fetchPerMeterTimeseries("1-1:2.29.0", start, end);
+          if (perMeterResp.meters && perMeterResp.meters.length > 1) {
+            perMeterProduction = perMeterResp.meters;
+          }
+        } catch (e) {
+          console.warn("Per-meter timeseries fetch failed, using merged view:", e);
+        }
+      }
+
       renderEnergyChart(canvas, consumption, production, {
         unit: this.state.chartUnit,
         referencePowerKw,
+        perMeterProduction,
         onZoomChange: (zoomStart: string, zoomEnd: string) => {
           this.handleChartZoomChange(zoomStart, zoomEnd);
         },
@@ -798,6 +819,15 @@ export class LenedaApp {
       case "last_month": {
         const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return { start: fmt(start), end: fmt(end) };
+      }
+      case "this_year": {
+        const start = new Date(now.getFullYear(), 0, 1);
+        return { start: fmt(start), end: fmt(now) };
+      }
+      case "last_year": {
+        const start = new Date(now.getFullYear() - 1, 0, 1);
+        const end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
         return { start: fmt(start), end: fmt(end) };
       }
       default: {

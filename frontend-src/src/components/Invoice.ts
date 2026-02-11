@@ -168,8 +168,10 @@ export function renderInvoice(state: AppState): string {
   const resolvedRates: ResolvedRate[] = productionMeters.map((m) => {
     const r = feedInRates.find((fr) => fr.meter_id === m.id);
     if (r) {
-      const effectiveRate = r.mode === "sensor" && r.sensor_value != null ? r.sensor_value : r.tariff;
-      const lbl = r.mode === "sensor" && r.sensor_value != null
+      // Sensor mode: use sensor_value if valid, otherwise fall back to tariff
+      const sensorOk = r.mode === "sensor" && r.sensor_value != null && isFinite(r.sensor_value);
+      const effectiveRate = sensorOk ? r.sensor_value! : (isFinite(r.tariff) ? r.tariff : config.feed_in_tariff);
+      const lbl = sensorOk
         ? `Sensor (${fmtNum(effectiveRate, 4)} ${config.currency ?? "EUR"}/kWh)`
         : "Fixed tariff";
       return { meterId: m.id, shortId: m.id ? "…" + m.id.slice(-8) : "Meter", rate: effectiveRate, label: lbl, mode: r.mode };
@@ -178,9 +180,10 @@ export function renderInvoice(state: AppState): string {
     return { meterId: m.id, shortId: m.id ? "…" + m.id.slice(-8) : "Meter", rate: config.feed_in_tariff, label: "Fixed tariff", mode: "fixed" };
   });
 
-  // Effective average feed-in rate
-  const avgFeedInRate = resolvedRates.length > 0
-    ? resolvedRates.reduce((sum, r) => sum + r.rate, 0) / resolvedRates.length
+  // Effective average feed-in rate — filter out invalid entries before averaging
+  const validRates = resolvedRates.filter((r) => isFinite(r.rate) && r.rate > 0);
+  const avgFeedInRate = validRates.length > 0
+    ? validRates.reduce((sum, r) => sum + r.rate, 0) / validRates.length
     : config.feed_in_tariff;
   const feedInRevenue = exported * avgFeedInRate;
   const hasMultipleRates = resolvedRates.length > 1;

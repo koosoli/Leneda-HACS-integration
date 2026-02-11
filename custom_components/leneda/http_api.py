@@ -426,6 +426,66 @@ class LenedaTimeseriesView(HomeAssistantView):
             return self.json({"error": str(e)}, status_code=500)
 
 
+class LenedaPerMeterTimeseriesView(HomeAssistantView):
+    """Per-meter 15-min production timeseries for stacked chart visualisation."""
+
+    url = "/leneda_api/data/timeseries/per-meter"
+    name = "api:leneda:data:timeseries:per_meter"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        obis = request.query.get("obis", "1-1:2.29.0")
+        start_str = request.query.get("start")
+        end_str = request.query.get("end")
+
+        coordinator = _get_first_coordinator(hass)
+        if not coordinator:
+            return self.json({"error": "no_data"}, status_code=503)
+
+        from homeassistant.util import dt as dt_util
+        import asyncio as _aio
+
+        now = dt_util.utcnow()
+        if start_str and end_str:
+            try:
+                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+            except ValueError:
+                return self.json({"error": "Invalid date format"}, status_code=400)
+        else:
+            start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+            end_dt = start_dt.replace(hour=23, minute=59, second=59)
+
+        prod_meters = getattr(coordinator, "production_meters", [])
+        if not prod_meters:
+            prod_meters = [coordinator.production_meter]
+
+        try:
+            all_results = await _aio.gather(*[
+                coordinator.api_client.async_get_metering_data(mid, obis, start_dt, end_dt)
+                for mid in prod_meters
+            ], return_exceptions=True)
+
+            meters_data = []
+            for mid, result in zip(prod_meters, all_results):
+                if isinstance(result, dict):
+                    meters_data.append({
+                        "meter_id": mid,
+                        "unit": result.get("unit", "kW"),
+                        "interval": result.get("intervalLength", "PT15M"),
+                        "items": result.get("items", []),
+                    })
+                elif isinstance(result, Exception):
+                    _LOGGER.error("Error fetching per-meter timeseries for %s: %s", mid, result)
+                    meters_data.append({"meter_id": mid, "unit": "kW", "interval": "PT15M", "items": []})
+
+            return self.json({"obis": obis, "meters": meters_data})
+        except Exception as e:
+            _LOGGER.error("Error fetching per-meter timeseries: %s", e)
+            return self.json({"error": str(e)}, status_code=500)
+
+
 # ─── Sensor overview ─────────────────────────────────────────────
 
 class LenedaSensorsView(HomeAssistantView):
@@ -594,6 +654,7 @@ def async_register_api_views(hass: HomeAssistant) -> None:
         LenedaDataView(),
         LenedaCustomDataView(),
         LenedaTimeseriesView(),
+        LenedaPerMeterTimeseriesView(),
         LenedaSensorsView(),
         LenedaConfigView(),
         LenedaConfigResetView(),

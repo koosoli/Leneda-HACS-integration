@@ -13,7 +13,7 @@
 import { Chart, registerables, type ChartConfiguration } from "chart.js";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
-import type { TimeseriesResponse, TimeseriesItem } from "../api/leneda";
+import type { TimeseriesResponse, TimeseriesItem, PerMeterTimeseries } from "../api/leneda";
 
 // Extend Chart.js plugin options to include our custom referenceLine plugin
 declare module "chart.js" {
@@ -40,7 +40,22 @@ export interface ChartOptions {
   referencePowerKw: number;
   /** Called when the user zooms / pans — receives the visible ISO date range. */
   onZoomChange?: (start: string, end: string) => void;
+  /** Per-meter production data for stacked green-shade chart. */
+  perMeterProduction?: PerMeterTimeseries[];
 }
+
+/** Distinct green/teal/lime shades for per-panel production datasets.
+ * Chosen for maximum visual separation in a dark-mode theme. */
+const PRODUCTION_GREENS = [
+  { bg: "rgba(190, 245, 39, 0.80)", border: "#bef527" }, // High-contrast Lime (#BEF527)
+  { bg: "rgba(35, 134, 54, 0.85)", border: "#2ea043" }, // GitHub Emerald
+  { bg: "rgba(0, 150, 136, 0.80)", border: "#009688" }, // Teal
+  { bg: "rgba(111, 219, 139, 0.80)", border: "#6fdb8b" }, // Light Mint
+  { bg: "rgba(0, 77, 64, 0.90)", border: "#004d40" }, // Deep Teal
+  { bg: "rgba(27, 94, 32, 0.90)", border: "#1b5e20" }, // Dark Forest
+  { bg: "rgba(139, 195, 74, 0.80)", border: "#8bc34a" }, // Mossy Green
+  { bg: "rgba(0, 255, 127, 0.70)", border: "#00ff7f" }, // Spring Green
+];
 
 /** A single data point with a real timestamp for time-scale. */
 interface TimePoint {
@@ -227,16 +242,49 @@ export function renderEnergyChart(
           borderWidth: 1,
           borderRadius: unit === "kwh" ? 4 : 2,
           barPercentage,
+          stack: "main",
         },
-        {
-          label: `Production (${yLabel})`,
-          data: pPoints as any,
-          backgroundColor: "rgba(63, 185, 80, 0.55)",
-          borderColor: "#3fb950",
-          borderWidth: 1,
-          borderRadius: unit === "kwh" ? 4 : 2,
-          barPercentage,
-        },
+        // Production datasets — one per meter if per-meter data available
+        ...(options.perMeterProduction && options.perMeterProduction.length > 1
+          ? options.perMeterProduction.map((meter, idx) => {
+            const green = PRODUCTION_GREENS[idx % PRODUCTION_GREENS.length];
+            const shortId = meter.meter_id ? "…" + meter.meter_id.slice(-8) : `Panel ${idx + 1}`;
+            const meterPoints: TimePoint[] = unit === "kwh"
+              ? (() => {
+                const useDaily = meter.items.length > 120;
+                if (useDaily) {
+                  const pMap = new Map<string, number>();
+                  for (const item of meter.items) {
+                    const day = item.startedAt.slice(0, 10);
+                    pMap.set(day, (pMap.get(day) ?? 0) + item.value * 0.25);
+                  }
+                  return [...pMap.entries()].sort().map(([day, val]) => ({ x: new Date(day + "T12:00:00").getTime(), y: val }));
+                }
+                return meter.items.map(i => ({ x: new Date(i.startedAt).getTime(), y: i.value * 0.25 }));
+              })()
+              : meter.items.map(i => ({ x: new Date(i.startedAt).getTime(), y: i.value }));
+            return {
+              label: `${shortId} (${yLabel})`,
+              data: meterPoints as any,
+              backgroundColor: green.bg,
+              borderColor: green.border,
+              borderWidth: 1,
+              borderRadius: unit === "kwh" ? 4 : 2,
+              barPercentage,
+              stack: "production",
+            };
+          })
+          : [{
+            label: `Production (${yLabel})`,
+            data: pPoints as any,
+            backgroundColor: "rgba(63, 185, 80, 0.55)",
+            borderColor: "#3fb950",
+            borderWidth: 1,
+            borderRadius: unit === "kwh" ? 4 : 2,
+            barPercentage,
+            stack: "production",
+          }]
+        ),
       ],
     },
     options: {
@@ -364,9 +412,11 @@ export function renderEnergyChart(
           grid: { color: "rgba(48, 54, 61, 0.3)" },
           // offset: true keeps bars centred on their time tick
           offset: true,
+          stacked: true,
         },
         y: {
           beginAtZero: true,
+          stacked: true,
           ticks: {
             color: "#8b949e",
             font: { size: 10 },

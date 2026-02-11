@@ -2,6 +2,19 @@
 
 All notable changes to the **Leneda HACS Integration** will be documented in this file.
 
+## [v2.0.1] - 2026-02-11
+
+### 🚀 New Features
+- **Per-Panel Energy Chart:** Visualize individual solar production sources with a new stacked bar chart. Now featuring distinct, high-contrast Lime/Teal/Emerald colors (#BEF527) for clear differentiation.
+- **Multi-Meter Sensor Support:** Sensors are now correctly grouped under their respective physical meter devices (Consumption, Production, Gas) in Home Assistant.
+- **Solar-Adjusted Exceedance:** Exceedance calculations now correctly subtract concurrent solar production from consumption at 15-minute intervals. `Overage = max(0, (Consumption - Solar) - Reference)`.
+
+### 🐛 Bug Fixes
+- **Feed-In Tariff Persistence:** Fixed a critical issue where configured feed-in tariffs were not saving correctly due to a field name collision.
+- **Year Range Logic:** "This Year" and "Last Year" buttons now work correctly in both HA and local dev (fixed missing logic cases).
+- **Average Feed-In Rate:** Hardened calculation logic to prevent NaN values when sensors are unavailable.
+- **Local Development:** Added support for multi-meter visualization and proper year ranges in the local dev environment.
+
 ## [v2.0.0] - 2026-02-10
 
 ### 🚀 Major Rewrites

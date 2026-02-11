@@ -224,6 +224,31 @@ export async function fetchTimeseries(
   return apiFetch<TimeseriesResponse>(url);
 }
 
+/** Per-meter timeseries response for stacked chart visualisation. */
+export interface PerMeterTimeseries {
+  meter_id: string;
+  unit: string;
+  interval: string;
+  items: TimeseriesItem[];
+}
+
+export interface PerMeterTimeseriesResponse {
+  obis: string;
+  meters: PerMeterTimeseries[];
+}
+
+export async function fetchPerMeterTimeseries(
+  obis: string,
+  start?: string,
+  end?: string
+): Promise<PerMeterTimeseriesResponse> {
+  if (IS_DEMO) return (await getDemoApi()).fetchPerMeterTimeseries(obis, start, end);
+  let url = `/leneda_api/data/timeseries/per-meter?obis=${encodeURIComponent(obis)}`;
+  if (start) url += `&start=${encodeURIComponent(start)}`;
+  if (end) url += `&end=${encodeURIComponent(end)}`;
+  return apiFetch<PerMeterTimeseriesResponse>(url);
+}
+
 export async function fetchSensors(): Promise<SensorsResponse> {
   if (IS_DEMO) return (await getDemoApi()).fetchSensors();
   return apiFetch<SensorsResponse>("/leneda_api/sensors");

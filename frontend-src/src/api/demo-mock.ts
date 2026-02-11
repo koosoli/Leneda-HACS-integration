@@ -22,6 +22,7 @@ import type {
   AppMode,
   Credentials,
   MeterConfig,
+  PerMeterTimeseriesResponse,
 } from "./leneda";
 
 // ═══════════════════════════════════════════════════════════════
@@ -283,7 +284,7 @@ async function liveRangeData(range: string): Promise<RangeData> {
   let exported = 0;
   for (let i = 0; i < prodMeters.length; i++) {
     production += results[1 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
-    exported  += results[2 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
+    exported += results[2 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
   }
   const selfConsumed = Math.max(0, production - exported);
   const gasIdx = 1 + prodMeters.length * 2;
@@ -546,6 +547,46 @@ export const demo = {
     if (hasRealCreds()) return liveTimeseries(obis, start, end);
     const base = obis.includes(":2.29.0") ? 4.5 : 2.0;
     return generateTimeseries(obis, base, start ? new Date(start) : undefined, end ? new Date(end) : undefined);
+  },
+
+  async fetchPerMeterTimeseries(obis: string, start?: string, end?: string): Promise<PerMeterTimeseriesResponse> {
+    if (hasRealCreds()) {
+      const creds = loadCreds()!;
+      const headers = { api_key: creds.api_key, energy_id: creds.energy_id };
+      const prodMeters = allProductionMeters(creds.meters);
+      const s = start ?? yesterdayRange().start.toISOString();
+      const e = end ?? yesterdayRange().end.toISOString();
+
+      const fetches = prodMeters.map((m) =>
+        lenedaFetch(`/api/metering-points/${m}/time-series?obisCode=${encodeURIComponent(obis)}&startDateTime=${encodeURIComponent(s)}&endDateTime=${encodeURIComponent(e)}`, headers).catch(() => null)
+      );
+      const results = await Promise.all(fetches);
+
+      return {
+        obis,
+        meters: prodMeters.map((mid, idx) => ({
+          meter_id: mid,
+          unit: results[idx]?.unit ?? "kW",
+          interval: results[idx]?.intervalLength ?? "PT15M",
+          items: results[idx]?.items ?? [],
+        })),
+      };
+    }
+
+    // Static mock: split the single mock timeseries into two fake meters
+    const t = generateTimeseries(obis, 4.5, start ? new Date(start) : undefined, end ? new Date(end) : undefined);
+    const m1 = JSON.parse(JSON.stringify(t));
+    const m2 = JSON.parse(JSON.stringify(t));
+    m1.items.forEach((it: any) => it.value = +(it.value * 0.6).toFixed(3));
+    m2.items.forEach((it: any) => it.value = +(it.value * 0.4).toFixed(3));
+
+    return {
+      obis,
+      meters: [
+        { meter_id: "DEMO_PANEL_1", ...m1 },
+        { meter_id: "DEMO_PANEL_2", ...m2 },
+      ],
+    };
   },
 
   async fetchSensors(): Promise<SensorsResponse> {

@@ -138,11 +138,34 @@ async def async_setup_entry(
             ("last_month_power_usage_over_reference", "57 - Last Month's Power Usage Over Reference", "energy"),
         ])
 
+    # ── Determine the correct meter ID per sensor category ──
+    # This ensures sensors appear under the device of the meter that actually
+    # provides the data, rather than everything being grouped under meter #1.
+    consumption_meter_id = coordinator.consumption_meter
+    production_meter_id = coordinator.production_meter
+    gas_meter_id = coordinator.gas_meter
+
+    def _meter_id_for_sensor(key: str, sensor_type: str) -> str:
+        """Return the correct metering point ID for a given sensor key."""
+        if sensor_type == "obis":
+            return coordinator._meter_for_obis(key)
+        if key.startswith("c_"):
+            return consumption_meter_id
+        if key.startswith("p_") or key.startswith("s_"):
+            return production_meter_id
+        if key.startswith("g_") or key.startswith("7-"):
+            return gas_meter_id
+        # Exceedance sensors relate to consumption
+        if "power_usage_over_reference" in key:
+            return consumption_meter_id
+        return metering_point_id  # fallback
+
     # The _v3 suffix on unique_id is applied to all sensors below to force entity recreation.
     sensors = []
     _LOGGER.debug("Creating sensors in the following order:")
     for key, name, sensor_type in all_sensors_ordered:
-        _LOGGER.debug(f"  - Key: {key}, Name: {name}, Type: {sensor_type}")
+        meter_id = _meter_id_for_sensor(key, sensor_type)
+        _LOGGER.debug(f"  - Key: {key}, Name: {name}, Type: {sensor_type}, Meter: …{meter_id[-8:]}")
         if sensor_type == "energy":
             # Default to energy sensor settings
             unit = "kWh"
@@ -154,21 +177,21 @@ async def async_setup_entry(
                 icon = "mdi:fire"
 
             sensors.append(
-                LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
+                LenedaEnergySensor(coordinator, meter_id, key, name, unit, device_class, icon)
             )
         elif sensor_type == "gas_volume":
             unit = "m³"
             device_class = SensorDeviceClass.GAS
             icon = "mdi:fire"
             sensors.append(
-                LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
+                LenedaEnergySensor(coordinator, meter_id, key, name, unit, device_class, icon)
             )
         elif sensor_type == "gas_std_volume":
             unit = "Nm³"
             device_class = SensorDeviceClass.GAS
             icon = "mdi:fire"
             sensors.append(
-                LenedaEnergySensor(coordinator, metering_point_id, key, name, unit, device_class, icon)
+                LenedaEnergySensor(coordinator, meter_id, key, name, unit, device_class, icon)
             )
         elif sensor_type == "obis":
             if key in OBIS_CODES:
@@ -176,7 +199,7 @@ async def async_setup_entry(
                 details_with_override = details.copy()
                 details_with_override["name"] = name
                 sensors.append(
-                    LenedaSensor(coordinator, metering_point_id, key, details_with_override)
+                    LenedaSensor(coordinator, meter_id, key, details_with_override)
                 )
 
     _LOGGER.debug("Adding %d entities.", len(sensors))

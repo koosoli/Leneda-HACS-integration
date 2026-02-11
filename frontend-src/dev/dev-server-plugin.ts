@@ -278,7 +278,7 @@ async function handleLiveData(path: string, parsed: URL, _req: any, res: any): P
     let exported = 0;
     for (let i = 0; i < prodMeters.length; i++) {
       production += results[1 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
-      exported  += results[2 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
+      exported += results[2 + i * 2]?.aggregatedTimeSeries?.[0]?.value ?? 0;
     }
     const selfConsumed = Math.max(0, production - exported);
     const gasIdx = 1 + prodMeters.length * 2;
@@ -383,6 +383,37 @@ async function handleLiveData(path: string, parsed: URL, _req: any, res: any): P
     return json(res, { obis, unit, interval, items });
   }
 
+  // ── Per-meter Timeseries (for stacked chart) ──
+  if (path === "/leneda_api/data/timeseries/per-meter") {
+    const obis = parsed.searchParams.get("obis") ?? "1-1:2.29.0";
+    const now = new Date();
+    const defStart = new Date(now); defStart.setDate(defStart.getDate() - 1); defStart.setHours(0, 0, 0, 0);
+    const defEnd = new Date(defStart); defEnd.setHours(23, 59, 59, 999);
+    const start = parsed.searchParams.get("start") ?? defStart.toISOString();
+    const end = parsed.searchParams.get("end") ?? defEnd.toISOString();
+
+    const prodMeters = allProductionMeters();
+    const fetches = prodMeters.map((m) =>
+      lenedaFetch(
+        `/api/metering-points/${m}/time-series?obisCode=${encodeURIComponent(obis)}&startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}`,
+        headers,
+      ).catch(() => null)
+    );
+    const results = await Promise.all(fetches);
+
+    const meters_data = prodMeters.map((mid, idx) => {
+      const data = results[idx];
+      return {
+        meter_id: mid,
+        unit: data?.unit ?? "kW",
+        interval: data?.intervalLength ?? "PT15M",
+        items: data?.items ?? [],
+      };
+    });
+
+    return json(res, { obis, meters: meters_data });
+  }
+
   // ── Sensors (limited in dev live mode) ──
   if (path === "/leneda_api/sensors") {
     return json(res, {
@@ -419,6 +450,28 @@ async function handleMockData(path: string, parsed: URL, req: any, res: any): Pr
   if (path === "/leneda_api/data/timeseries") {
     const obis = parsed.searchParams.get("obis") ?? "1-1:1.29.0";
     return json(res, mockHandlers.getTimeseries(obis, parsed.searchParams.get("start") ?? undefined, parsed.searchParams.get("end") ?? undefined));
+  }
+
+  if (path === "/leneda_api/data/timeseries/per-meter") {
+    const obis = parsed.searchParams.get("obis") ?? "1-1:2.29.0";
+    const start = parsed.searchParams.get("start") ?? undefined;
+    const end = parsed.searchParams.get("end") ?? undefined;
+
+    // For mock mode, simulate 2 production panels by splitting the demo production
+    const t1 = mockHandlers.getTimeseries(obis, start, end);
+    const t2 = JSON.parse(JSON.stringify(t1));
+
+    // Split values 60/40 for visual distinction
+    t1.items.forEach((it: any) => it.value = +(it.value * 0.6).toFixed(3));
+    t2.items.forEach((it: any) => it.value = +(it.value * 0.4).toFixed(3));
+
+    return json(res, {
+      obis,
+      meters: [
+        { meter_id: "DEMO_SOLAR_PANEL_NORTH", ...t1 },
+        { meter_id: "DEMO_SOLAR_PANEL_SOUTH", ...t2 },
+      ]
+    });
   }
 
   if (path === "/leneda_api/sensors") {
@@ -532,6 +585,15 @@ function dateRangeFor(range: string): { start: string; end: string } {
     case "last_month": {
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { start: fmt(start), end: fmt(end) };
+    }
+    case "this_year": {
+      const start = new Date(now.getFullYear(), 0, 1);
+      return { start: fmt(start), end: fmt(now) };
+    }
+    case "last_year": {
+      const start = new Date(now.getFullYear() - 1, 0, 1);
+      const end = new Date(now.getFullYear() - 1, 11, 31);
       return { start: fmt(start), end: fmt(end) };
     }
     default:

@@ -29,25 +29,25 @@ const FIELD_GROUPS: FieldGroup[] = [
     title: "Energy Supplier",
     icon: "⚡",
     fields: [
-      { key: "energy_fixed_fee",      label: "Fixed Fee",        step: "0.01",   unit: "EUR/mo", type: "number" },
-      { key: "energy_variable_rate",  label: "Variable Rate",    step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "energy_fixed_fee", label: "Fixed Fee", step: "0.01", unit: "EUR/mo", type: "number" },
+      { key: "energy_variable_rate", label: "Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
     ],
   },
   {
     title: "Network Operator",
     icon: "🔌",
     fields: [
-      { key: "network_metering_rate", label: "Metering Fee",        step: "0.01",   unit: "EUR/mo", type: "number" },
-      { key: "network_power_ref_rate",label: "Power Reference Fee", step: "0.01",   unit: "EUR/mo", type: "number" },
-      { key: "network_variable_rate", label: "Variable Rate",       step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "network_metering_rate", label: "Metering Fee", step: "0.01", unit: "EUR/mo", type: "number" },
+      { key: "network_power_ref_rate", label: "Power Reference Fee", step: "0.01", unit: "EUR/mo", type: "number" },
+      { key: "network_variable_rate", label: "Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
     ],
   },
   {
     title: "Reference Power & Exceedance",
     icon: "📏",
     fields: [
-      { key: "reference_power_kw",    label: "Reference Power (Referenzwert)", step: "0.1", unit: "kW", type: "number" },
-      { key: "exceedance_rate",       label: "Exceedance Surcharge",    step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "reference_power_kw", label: "Reference Power (Referenzwert)", step: "0.1", unit: "kW", type: "number" },
+      { key: "exceedance_rate", label: "Exceedance Surcharge", step: "0.0001", unit: "EUR/kWh", type: "number" },
     ],
   },
   {
@@ -59,12 +59,12 @@ const FIELD_GROUPS: FieldGroup[] = [
     title: "Gas Billing",
     icon: "🔥",
     fields: [
-      { key: "gas_fixed_fee",              label: "Supplier Fixed Fee",     step: "0.01",   unit: "EUR/mo",  type: "number" },
-      { key: "gas_variable_rate",          label: "Supplier Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
-      { key: "gas_network_fee",            label: "Network Fixed Fee",      step: "0.01",   unit: "EUR/mo",  type: "number" },
-      { key: "gas_network_variable_rate",  label: "Network Variable Rate",  step: "0.0001", unit: "EUR/kWh", type: "number" },
-      { key: "gas_tax_rate",               label: "Gas Tax",                step: "0.0001", unit: "EUR/kWh", type: "number" },
-      { key: "gas_vat_rate",               label: "Gas VAT Rate",           step: "0.01",   unit: "decimal (0.08 = 8%)", type: "number" },
+      { key: "gas_fixed_fee", label: "Supplier Fixed Fee", step: "0.01", unit: "EUR/mo", type: "number" },
+      { key: "gas_variable_rate", label: "Supplier Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "gas_network_fee", label: "Network Fixed Fee", step: "0.01", unit: "EUR/mo", type: "number" },
+      { key: "gas_network_variable_rate", label: "Network Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "gas_tax_rate", label: "Gas Tax", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "gas_vat_rate", label: "Gas VAT Rate", step: "0.01", unit: "decimal (0.08 = 8%)", type: "number" },
     ],
   },
   {
@@ -76,16 +76,16 @@ const FIELD_GROUPS: FieldGroup[] = [
     title: "Taxes & Levies",
     icon: "🏛️",
     fields: [
-      { key: "compensation_fund_rate",label: "Compensation Fund",  step: "0.0001", unit: "EUR/kWh", type: "number" },
-      { key: "electricity_tax_rate",  label: "Electricity Tax",    step: "0.0001", unit: "EUR/kWh", type: "number" },
-      { key: "vat_rate",              label: "VAT Rate",           step: "0.01",   unit: "decimal (0.08 = 8%)", type: "number" },
+      { key: "compensation_fund_rate", label: "Compensation Fund", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "electricity_tax_rate", label: "Electricity Tax", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "vat_rate", label: "VAT Rate", step: "0.01", unit: "decimal (0.08 = 8%)", type: "number" },
     ],
   },
   {
     title: "General",
     icon: "⚙️",
     fields: [
-      { key: "currency",              label: "Currency",            step: "",       unit: "",        type: "text" },
+      { key: "currency", label: "Currency", step: "", unit: "", type: "text" },
     ],
   },
 ];
@@ -302,9 +302,9 @@ export function renderSettings(
   const feedInSection = productionMeters.length === 0
     ? `<p class="muted">No production meters configured — add a meter with Power Production type above.</p>`
     : productionMeters.map((m, idx) => {
-        const r = rateFor(m.id);
-        const shortId = m.id ? "…" + m.id.slice(-8) : `Meter ${idx + 1}`;
-        return `
+      const r = rateFor(m.id);
+      const shortId = m.id ? "…" + m.id.slice(-8) : `Meter ${idx + 1}`;
+      return `
           <div class="feed-in-meter-card" data-meter-idx="${idx}" data-meter-id="${m.id}">
             <div class="feed-in-meter-header">
               <span class="meter-type-badge meter-type-production">☀️ ${shortId}</span>
@@ -351,7 +351,7 @@ export function renderSettings(
               <div class="form-row">
                 <label for="cfg-feed_in_rate_${idx}_fallback">Fallback Tariff</label>
                 <div class="input-group">
-                  <input id="cfg-feed_in_rate_${idx}_fallback" name="feed_in_rate_${idx}_tariff" type="number" step="0.0001" value="${r.tariff}" />
+                  <input id="cfg-feed_in_rate_${idx}_fallback" name="feed_in_rate_${idx}_fallback_tariff" type="number" step="0.0001" value="${r.tariff}" />
                   <span class="input-unit">EUR/kWh</span>
                 </div>
                 <p class="muted" style="font-size: var(--text-xs); margin-top: var(--sp-1);">
@@ -361,7 +361,7 @@ export function renderSettings(
             </div>
           </div>
         `;
-      }).join("");
+    }).join("");
 
   const hasGasMeter = (config?.meters ?? []).some((m) => m.types.includes("gas")) || config?.meter_has_gas;
 
@@ -380,10 +380,10 @@ export function renderSettings(
   const meterFeesSection = allMeters.length === 0
     ? `<p class="muted">No meters configured.</p>`
     : allMeters.map((m, idx) => {
-        const f = feeFor(m.id);
-        const shortId = m.id ? "…" + m.id.slice(-8) : `Meter ${idx + 1}`;
-        const typeIcons = m.types.map((t: string) => TYPE_ICONS[t] ?? "").join(" ");
-        return `
+      const f = feeFor(m.id);
+      const shortId = m.id ? "…" + m.id.slice(-8) : `Meter ${idx + 1}`;
+      const typeIcons = m.types.map((t: string) => TYPE_ICONS[t] ?? "").join(" ");
+      return `
           <div class="meter-fee-card" style="margin-bottom: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--clr-border); border-radius: var(--radius);">
             <div style="display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2);">
               <span>${typeIcons}</span>
@@ -405,7 +405,7 @@ export function renderSettings(
             </div>
           </div>
         `;
-      }).join("");
+    }).join("");
 
   const groups = FIELD_GROUPS.map((g) => {
     // Hide gas billing section when no gas meter is configured

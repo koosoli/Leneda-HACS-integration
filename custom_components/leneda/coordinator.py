@@ -115,21 +115,38 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
             return self.production_meter
         return self.consumption_meter
 
-    def _calculate_power_overage(self, items: list[dict], ref_power_kw: float) -> float:
-        """Calculate total kWh consumed over a reference power."""
+    def _calculate_power_overage(self, items: list[dict], ref_power_kw: float, production_items: list[dict] | None = None) -> float:
+        """Calculate total kWh consumed over a reference power.
+
+        When *production_items* is provided, solar production is subtracted
+        from consumption at each 15-min interval so only the **net grid draw**
+        is evaluated against the reference limit.
+        """
         total_overage_kwh = 0.0
         if not items:
             return total_overage_kwh
 
+        # Build a lookup of production kW by timestamp for O(1) access
+        prod_by_ts: dict[str, float] = {}
+        if production_items:
+            for p in production_items:
+                try:
+                    prod_by_ts[p["startedAt"]] = float(p["value"])
+                except (ValueError, TypeError, KeyError):
+                    continue
+
         for item in items:
             try:
-                power_kw = float(item["value"])
-                if power_kw > ref_power_kw:
+                consumption_kw = float(item["value"])
+                # Subtract concurrent solar production if available
+                solar_kw = prod_by_ts.get(item.get("startedAt", ""), 0.0)
+                net_kw = max(0.0, consumption_kw - solar_kw)
+                if net_kw > ref_power_kw:
                     # Energy for a 15-minute interval = Power (kW) * 0.25 (h)
-                    overage_energy = (power_kw - ref_power_kw) * 0.25
+                    overage_energy = (net_kw - ref_power_kw) * 0.25
                     total_overage_kwh += overage_energy
             except (ValueError, TypeError):
-                continue # Skip if value is not a valid number
+                continue  # Skip if value is not a valid number
         return round(total_overage_kwh, 4)
 
     async def _async_update_data(self) -> dict[str, float | None]:
@@ -177,17 +194,26 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
 
                 # Tasks for fetching detailed 15-min data for power-over-reference calculations
+                # We fetch both consumption AND production so exceedance considers solar offset.
                 power_over_ref_tasks = []
                 if self.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or self.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
                     _LOGGER.debug("Setting up tasks for monthly power over reference data...")
                     power_over_ref_tasks = [
-                        # Current month (so far)
+                        # Current month consumption (so far)
                         self.api_client.async_get_metering_data(
                             self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
                         ),
-                        # Previous month
+                        # Previous month consumption
                         self.api_client.async_get_metering_data(
                             self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, start_of_last_month, end_of_last_month
+                        ),
+                        # Current month production (so far) — for solar offset
+                        self.api_client.async_get_metering_data(
+                            self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, month_start_dt, yesterday_end_dt
+                        ),
+                        # Previous month production — for solar offset
+                        self.api_client.async_get_metering_data(
+                            self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, start_of_last_month, end_of_last_month
                         ),
                     ]
 
@@ -589,32 +615,39 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                             ref_power_kw = float(ref_power_static)
 
                         if ref_power_kw is not None:
-                            # Yesterday's calculation
+                            # Yesterday's calculation — also fetch yesterday's production for solar offset
                             consumption_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == CONSUMPTION_CODE), None)
+                            production_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == PRODUCTION_CODE), None)
+                            prod_items_yesterday = production_result.get("items") if isinstance(production_result, dict) else None
                             if isinstance(consumption_result, dict) and consumption_result.get("items"):
-                                overage = self._calculate_power_overage(consumption_result["items"], ref_power_kw)
+                                overage = self._calculate_power_overage(consumption_result["items"], ref_power_kw, prod_items_yesterday)
                                 data["yesterdays_power_usage_over_reference"] = overage
-                                _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for yesterday.")
+                                _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for yesterday (solar-adjusted).")
 
                             # Process results for monthly power over reference
+                            # power_over_ref_results: [cur_month_cons, last_month_cons, cur_month_prod, last_month_prod]
                             if power_over_ref_results:
-                                # Current month's calculation
-                                current_month_result = power_over_ref_results[0]
-                                if isinstance(current_month_result, dict) and current_month_result.get("items"):
-                                    overage = self._calculate_power_overage(current_month_result["items"], ref_power_kw)
+                                # Current month's calculation (solar-adjusted)
+                                current_month_cons = power_over_ref_results[0]
+                                current_month_prod = power_over_ref_results[2] if len(power_over_ref_results) > 2 else None
+                                prod_items_cur = current_month_prod.get("items") if isinstance(current_month_prod, dict) else None
+                                if isinstance(current_month_cons, dict) and current_month_cons.get("items"):
+                                    overage = self._calculate_power_overage(current_month_cons["items"], ref_power_kw, prod_items_cur)
                                     data["current_month_power_usage_over_reference"] = overage
-                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for current month.")
-                                elif isinstance(current_month_result, Exception):
-                                    _LOGGER.error("Error fetching current month power over reference data: %s", current_month_result)
+                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for current month (solar-adjusted).")
+                                elif isinstance(current_month_cons, Exception):
+                                    _LOGGER.error("Error fetching current month power over reference data: %s", current_month_cons)
 
-                                # Last month's calculation
-                                last_month_result = power_over_ref_results[1]
-                                if isinstance(last_month_result, dict) and last_month_result.get("items"):
-                                    overage = self._calculate_power_overage(last_month_result["items"], ref_power_kw)
+                                # Last month's calculation (solar-adjusted)
+                                last_month_cons = power_over_ref_results[1]
+                                last_month_prod = power_over_ref_results[3] if len(power_over_ref_results) > 3 else None
+                                prod_items_last = last_month_prod.get("items") if isinstance(last_month_prod, dict) else None
+                                if isinstance(last_month_cons, dict) and last_month_cons.get("items"):
+                                    overage = self._calculate_power_overage(last_month_cons["items"], ref_power_kw, prod_items_last)
                                     data["last_month_power_usage_over_reference"] = overage
-                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for last month.")
-                                elif isinstance(last_month_result, Exception):
-                                    _LOGGER.error("Error fetching last month power over reference data: %s", last_month_result)
+                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for last month (solar-adjusted).")
+                                elif isinstance(last_month_cons, Exception):
+                                    _LOGGER.error("Error fetching last month power over reference data: %s", last_month_cons)
                     except (ValueError, TypeError) as e:
                         _LOGGER.error(f"Could not calculate power usage over reference: {e}")
 
