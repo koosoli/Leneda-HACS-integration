@@ -822,6 +822,26 @@ a:hover {
     padding: var(--sp-4);
   }
 
+  /* Range Selector: prevent panning of the whole page */
+  .range-selector {
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    justify-content: flex-start;
+    padding: var(--sp-2);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .range-selector::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .range-btn {
+    flex: 0 0 auto;
+    padding: var(--sp-2) var(--sp-4);
+  }
+
   .stats-grid {
     grid-template-columns: 1fr 1fr;
     gap: var(--sp-3);
@@ -831,12 +851,10 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
-  .chart-metrics-row,
   .flow-metrics-row {
     flex-direction: column;
   }
 
-  .chart-metrics-row .metrics-card,
   .flow-metrics-row .metrics-card {
     flex: none;
     width: 100%;
@@ -857,7 +875,7 @@ a:hover {
   }
 
   .leneda-elite-flow {
-    padding: var(--sp-4);
+    padding: var(--sp-4) var(--sp-2);
   }
 
   .elite-header {
@@ -870,22 +888,62 @@ a:hover {
   }
 
   .elite-badges-grid {
+    position: relative;
+    bottom: 0;
     flex-wrap: wrap;
-    bottom: -20px;
     gap: var(--sp-2);
+    margin-top: var(--sp-4);
   }
 
   .glass-badge {
     padding: var(--sp-1) var(--sp-3);
+    flex: 1 1 calc(50% - var(--sp-2));
+    justify-content: center;
   }
 
   .module-value {
     font-size: var(--text-2xl);
+  }
+
+  /* Navbar Mobile Overrides */
+  .navbar-tabs {
+    display: none; /* Hidden by default on mobile, shown via menu */
+  }
+
+  .navbar-tabs.mobile-open {
+    display: flex;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--clr-surface);
+    flex-direction: column;
+    padding: var(--sp-6);
+    z-index: 1000;
+    height: calc(100vh - 56px);
+    gap: var(--sp-4);
+  }
+
+  .nav-btn {
+    width: 100%;
+    height: 56px;
+    font-size: var(--text-base);
+    justify-content: flex-start;
+    padding-left: var(--sp-6);
   }
 }
 
 @media (max-width: 480px) {
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .elite-scene {
+    height: 240px;
+  }
+  
+  .glass-badge {
+    flex: 1 1 100%;
   }
 }

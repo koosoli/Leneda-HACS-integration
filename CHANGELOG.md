@@ -2,6 +2,14 @@
 
 All notable changes to the **Leneda HACS Integration** will be documented in this file.
 
+## [v2.0.2] - 2026-02-12
+
+### 📱 Mobile Responsiveness Overhaul
+- **Responsive Navigation:** Replaced the desktop-only navigation bar with a mobile-friendly hamburger menu for screens smaller than 768px.
+- **Scrollable Time Selector:** The range selector now supports horizontal touch scrolling, preventing the entire page from panning.
+- **Adaptive Modules:** Optimized the dashboard layout for small screens, stacking stat cards, energy flow, and key metrics vertically for better legibility.
+- **Touch-Optimized UI:** Increased spacing and touch targets across the dashboard for a premium mobile experience.
+
 ## [v2.0.1] - 2026-02-11
 
 ### 🚀 New Features

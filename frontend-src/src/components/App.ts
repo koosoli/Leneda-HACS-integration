@@ -55,6 +55,7 @@ export interface AppState {
   error: string | null;
   mode: "ha" | "standalone";
   credentials: Credentials | null;
+  isMenuOpen: boolean;
 }
 
 export class LenedaApp {
@@ -72,6 +73,7 @@ export class LenedaApp {
     error: null,
     mode: "ha",
     credentials: null,
+    isMenuOpen: false,
   };
 
   /** Pre-zoom state — restored when user clicks "Reset Zoom" */
@@ -233,6 +235,14 @@ export class LenedaApp {
         this.render();
       });
     }
+
+    // Close mobile menu on tab change
+    this.state.isMenuOpen = false;
+  }
+
+  private toggleMenu(): void {
+    this.state.isMenuOpen = !this.state.isMenuOpen;
+    this.render();
   }
 
   private render(): void {
@@ -291,7 +301,7 @@ export class LenedaApp {
 
     this.root.innerHTML = `
       <div class="app-shell">
-        ${renderNavBar(tab, (t) => this.changeTab(t))}
+        ${renderNavBar(tab, (t) => this.changeTab(t), this.state.isMenuOpen)}
         <main class="main-content">
           ${loading ? '<div class="loading-bar"></div>' : ""}
           ${tabContent}
@@ -306,6 +316,11 @@ export class LenedaApp {
   }
 
   private attachNavListeners(): void {
+    // Mobile menu toggle
+    this.root.querySelector(".menu-toggle")?.addEventListener("click", () => {
+      this.toggleMenu();
+    });
+
     this.root.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tab = (btn as HTMLElement).dataset.tab as Tab;

@@ -5,7 +5,8 @@ import type { Tab } from "./App";
 
 export function renderNavBar(
   activeTab: Tab,
-  _onTabChange: (tab: Tab) => void
+  _onTabChange: (tab: Tab) => void,
+  isMenuOpen = false
 ): string {
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: "🏠" },
@@ -18,9 +19,15 @@ export function renderNavBar(
     <header class="navbar" role="navigation" aria-label="Main navigation">
       <div class="navbar-brand">
         <img src="${import.meta.env.BASE_URL}logo.png" srcset="${import.meta.env.BASE_URL}logo@2x.png 2x" alt="Leneda Logo" class="navbar-logo-img" />
-
+ 
+        <button class="menu-toggle ${isMenuOpen ? "open" : ""}" aria-label="Toggle menu" aria-expanded="${isMenuOpen}">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
       </div>
-      <nav class="navbar-tabs" role="tablist">
+
+      <nav class="navbar-tabs ${isMenuOpen ? "mobile-open" : ""}" role="tablist">
         ${tabs
       .map(
         (t) => `
