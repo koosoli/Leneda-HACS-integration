@@ -2,6 +2,12 @@
 
 All notable changes to the **Leneda HACS Integration** will be documented in this file.
 
+## [v2.0.3] - 2026-02-12
+
+### 🛠️ Build & Deployment
+- **Build Automation:** Added `build-dashboard.bat` to automate the process of building the frontend and syncing it to the Home Assistant integration directory.
+- **Version Sync:** Unified versioning across `manifest.json`, `package.json`, and the Dashboard UI.
+
 ## [v2.0.2] - 2026-02-12
 
 ### 📱 Mobile Responsiveness Overhaul
