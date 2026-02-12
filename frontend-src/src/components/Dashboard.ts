@@ -50,7 +50,7 @@ export function renderDashboard(state: AppState): string {
 
   return `
     <div class="dashboard" style="position: relative;">
-      <div style="position:fixed;bottom:4px;right:4px;font-size:10px;opacity:0.5;pointer-events:none;z-index:9999;">v:ULTRATHINK</div>
+      <div style="position:fixed;bottom:4px;right:4px;font-size:10px;opacity:0.5;pointer-events:none;z-index:9999;">v:2.0.2</div>
 
       <!-- Range Selector -->
       <div class="range-selector">
