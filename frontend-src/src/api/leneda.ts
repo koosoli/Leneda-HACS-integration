@@ -134,6 +134,7 @@ export interface BillingConfig {
   compensation_fund_rate: number;
   electricity_tax_rate: number;
   vat_rate: number;
+  connect_discount: number;
   currency: string;
   meter_has_gas?: boolean;
   ha_meter_id?: string;

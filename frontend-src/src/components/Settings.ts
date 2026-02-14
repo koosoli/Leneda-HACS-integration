@@ -81,6 +81,13 @@ const FIELD_GROUPS: FieldGroup[] = [
       { key: "vat_rate", label: "VAT Rate", step: "0.01", unit: "decimal (0.08 = 8%)", type: "number" },
     ],
   },
+    {
+    title: "Discounts",
+    icon: "🤑",
+    fields: [
+      { key: "connect_discount", label: "Connect Discount", step: "0.01", unit: "EUR/mo", type: "number" },
+    ],
+  },
   {
     title: "General",
     icon: "⚙️",
