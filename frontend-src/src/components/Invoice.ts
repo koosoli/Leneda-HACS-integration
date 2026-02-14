@@ -143,8 +143,8 @@ export function renderInvoice(state: AppState): string {
   const compensationCredit = consumption * config.compensation_fund_rate;
   const electricityTax = consumption * config.electricity_tax_rate;
 
-  // 5. Connect discount (if configured) — prorated
-  const connectDiscount = config.connect_discount ?? 0;
+  // 5. Connect discount — prorated
+  const connectDiscount = config.connect_discount * proFactor;
 
   // 6. Subtotal (costs) — fixed fees are prorated
   const subtotalCosts =
