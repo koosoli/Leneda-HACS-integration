@@ -30,7 +30,7 @@ const FIELD_GROUPS: FieldGroup[] = [
     icon: "⚡",
     fields: [
       { key: "energy_fixed_fee", label: "Fixed Fee", step: "0.01", unit: "EUR/mo", type: "number" },
-      { key: "energy_variable_rate", label: "Variable Rate", step: "0.0001", unit: "EUR/kWh", type: "number" },
+      { key: "energy_variable_rate", label: "Variable Rate", step: "0.00001", unit: "EUR/kWh", type: "number" },
     ],
   },
   {
