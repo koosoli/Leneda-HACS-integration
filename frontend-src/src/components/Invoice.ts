@@ -143,7 +143,10 @@ export function renderInvoice(state: AppState): string {
   const compensationCredit = consumption * config.compensation_fund_rate;
   const electricityTax = consumption * config.electricity_tax_rate;
 
-  // 5. Subtotal (costs) — fixed fees are prorated
+  // 5. Connect discount — prorated
+  const connectDiscount = config.connect_discount * proFactor;
+
+  // 6. Subtotal (costs) — fixed fees are prorated
   const subtotalCosts =
     proratedFixedFee +
     energyCost +
@@ -153,12 +156,13 @@ export function renderInvoice(state: AppState): string {
     exceedanceCost +
     meterFeesTotal +
     compensationCredit +
+    connectDiscount +
     electricityTax;
 
   const vat = subtotalCosts * config.vat_rate;
   const totalCosts = subtotalCosts + vat;
 
-  // 6. Feed-in revenue (per-production-meter rates)
+  // 7. Feed-in revenue (per-production-meter rates)
   //    Resolve the effective rate for each production meter.
   //    Without per-meter export data we split equally across production meters.
   const productionMeters = (config.meters ?? []).filter((m) => m.types.includes("production"));
@@ -196,7 +200,7 @@ export function renderInvoice(state: AppState): string {
   const totalSelfConsumedSavings = selfConsumedSavings + selfConsumedSavingsVat;
   const totalSolarValue = totalSelfConsumedSavings + feedInRevenue;
 
-  // 7. Net amount
+  // 8. Net amount
   const netTotal = totalCosts - feedInRevenue;
 
   // ── Gas cost calculation ──
