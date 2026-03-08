@@ -8,7 +8,16 @@
  *   a note that credentials are managed via HA Integrations page.
  * Billing configuration is always visible in both modes.
  */
-import type { BillingConfig, Credentials, MeterConfig, FeedInRate, MeterMonthlyFee } from "../api/leneda";
+import type {
+  BillingConfig,
+  Credentials,
+  MeterConfig,
+  FeedInRate,
+  MeterMonthlyFee,
+  ConsumptionRateWindow,
+  ReferencePowerWindow,
+  DayGroup,
+} from "../api/leneda";
 
 interface Field {
   key: keyof BillingConfig;
@@ -23,6 +32,12 @@ interface FieldGroup {
   icon: string;
   fields: Field[];
 }
+
+const DAY_GROUP_OPTIONS: Array<{ value: DayGroup; label: string }> = [
+  { value: "all", label: "Every day" },
+  { value: "weekdays", label: "Weekdays" },
+  { value: "weekends", label: "Weekends" },
+];
 
 const FIELD_GROUPS: FieldGroup[] = [
   {
@@ -49,6 +64,16 @@ const FIELD_GROUPS: FieldGroup[] = [
       { key: "reference_power_kw", label: "Reference Power (Referenzwert)", step: "0.1", unit: "kW", type: "number" },
       { key: "exceedance_rate", label: "Exceedance Surcharge", step: "0.0001", unit: "EUR/kWh", type: "number" },
     ],
+  },
+  {
+    title: "Reference Power Windows",
+    icon: "⏱️",
+    fields: [],
+  },
+  {
+    title: "Time-of-Use Tariffs",
+    icon: "🕒",
+    fields: [],
   },
   {
     title: "Feed-in / Selling",
@@ -79,6 +104,13 @@ const FIELD_GROUPS: FieldGroup[] = [
       { key: "compensation_fund_rate", label: "Compensation Fund", step: "0.0001", unit: "EUR/kWh", type: "number" },
       { key: "electricity_tax_rate", label: "Electricity Tax", step: "0.0001", unit: "EUR/kWh", type: "number" },
       { key: "vat_rate", label: "VAT Rate", step: "0.01", unit: "decimal (0.08 = 8%)", type: "number" },
+    ],
+  },
+  {
+    title: "Discounts",
+    icon: "💸",
+    fields: [
+      { key: "connect_discount", label: "Connect Discount", step: "0.01", unit: "EUR/mo", type: "number" },
     ],
   },
   {
@@ -158,6 +190,92 @@ function renderMeterRow(index: number, meter: MeterConfig, readonly: boolean): s
             <input type="checkbox" name="meter_${index}_gas" ${meter.types.includes("gas") ? "checked" : ""} />
             <span>🔥 Gas Consumption</span>
           </label>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDayGroupOptions(selected: DayGroup): string {
+  return DAY_GROUP_OPTIONS.map(
+    (opt) => `<option value="${opt.value}" ${opt.value === selected ? "selected" : ""}>${opt.label}</option>`,
+  ).join("");
+}
+
+function renderConsumptionRateWindowRow(index: number, window: ConsumptionRateWindow): string {
+  return `
+    <div class="meter-card">
+      <div class="meter-header">
+        <strong>Tariff Window ${index + 1}</strong>
+        <button type="button" class="btn-icon remove-consumption-window-btn" data-window="${index}" title="Remove tariff window">&times;</button>
+      </div>
+      <div class="form-row">
+        <label for="consumption-window-${index}-label">Label</label>
+        <div class="input-group">
+          <input id="consumption-window-${index}-label" name="consumption_window_${index}_label" type="text" value="${window.label ?? ""}" placeholder="e.g. Night / Drive / Weekend" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="consumption-window-${index}-day-group">Active days</label>
+        <div class="input-group">
+          <select id="consumption-window-${index}-day-group" name="consumption_window_${index}_day_group">
+            ${renderDayGroupOptions(window.day_group ?? "all")}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Time window</label>
+        <div class="input-group schedule-window-inputs">
+          <input name="consumption_window_${index}_start_time" type="time" value="${window.start_time ?? "00:00"}" />
+          <span class="input-unit">to</span>
+          <input name="consumption_window_${index}_end_time" type="time" value="${window.end_time ?? "06:00"}" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="consumption-window-${index}-rate">Supplier rate</label>
+        <div class="input-group">
+          <input id="consumption-window-${index}-rate" name="consumption_window_${index}_rate" type="number" step="0.0001" value="${window.rate ?? 0}" />
+          <span class="input-unit">EUR/kWh</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReferencePowerWindowRow(index: number, window: ReferencePowerWindow): string {
+  return `
+    <div class="meter-card">
+      <div class="meter-header">
+        <strong>Reference Window ${index + 1}</strong>
+        <button type="button" class="btn-icon remove-reference-window-btn" data-window="${index}" title="Remove reference window">&times;</button>
+      </div>
+      <div class="form-row">
+        <label for="reference-window-${index}-label">Label</label>
+        <div class="input-group">
+          <input id="reference-window-${index}-label" name="reference_window_${index}_label" type="text" value="${window.label ?? ""}" placeholder="e.g. Evening / Charging hours" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="reference-window-${index}-day-group">Active days</label>
+        <div class="input-group">
+          <select id="reference-window-${index}-day-group" name="reference_window_${index}_day_group">
+            ${renderDayGroupOptions(window.day_group ?? "all")}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Time window</label>
+        <div class="input-group schedule-window-inputs">
+          <input name="reference_window_${index}_start_time" type="time" value="${window.start_time ?? "17:00"}" />
+          <span class="input-unit">to</span>
+          <input name="reference_window_${index}_end_time" type="time" value="${window.end_time ?? "00:00"}" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="reference-window-${index}-power">Reference power</label>
+        <div class="input-group">
+          <input id="reference-window-${index}-power" name="reference_window_${index}_reference_power_kw" type="number" step="0.1" value="${window.reference_power_kw ?? 5}" />
+          <span class="input-unit">kW</span>
         </div>
       </div>
     </div>
@@ -364,6 +482,8 @@ export function renderSettings(
     }).join("");
 
   const hasGasMeter = (config?.meters ?? []).some((m) => m.types.includes("gas")) || config?.meter_has_gas;
+  const consumptionRateWindows: ConsumptionRateWindow[] = config?.consumption_rate_windows ?? [];
+  const referencePowerWindows: ReferencePowerWindow[] = config?.reference_power_windows ?? [];
 
   // ── Per-meter monthly fees section ──
   const allMeters = config?.meters ?? [];
@@ -407,6 +527,35 @@ export function renderSettings(
         `;
     }).join("");
 
+  const timeOfUseSection = `
+    <p class="muted" style="margin: 0 0 var(--sp-3) 0; font-size: 0.85rem;">
+      Optional supplier-rate windows. Outside these windows, the base <strong>Energy Supplier → Variable Rate</strong> is used.
+      Windows can cross midnight by setting an end time earlier than the start time.
+    </p>
+    <div id="consumption-windows-container">
+      ${consumptionRateWindows.length > 0
+        ? consumptionRateWindows.map((w, idx) => renderConsumptionRateWindowRow(idx, w)).join("")
+        : '<p class="muted">No time-of-use windows configured. Using the flat supplier rate.</p>'}
+    </div>
+    <button type="button" id="add-consumption-window-btn" class="btn btn-outline" style="margin-top: var(--sp-3);">
+      + Add Tariff Window
+    </button>
+  `;
+
+  const referenceWindowsSection = `
+    <p class="muted" style="margin: 0 0 var(--sp-3) 0; font-size: 0.85rem;">
+      Optional reference-power overrides for specific hours. Outside these windows, the base reference power above is used.
+    </p>
+    <div id="reference-windows-container">
+      ${referencePowerWindows.length > 0
+        ? referencePowerWindows.map((w, idx) => renderReferencePowerWindowRow(idx, w)).join("")
+        : '<p class="muted">No scheduled reference windows configured. Using one reference power all day.</p>'}
+    </div>
+    <button type="button" id="add-reference-window-btn" class="btn btn-outline" style="margin-top: var(--sp-3);">
+      + Add Reference Window
+    </button>
+  `;
+
   const groups = FIELD_GROUPS.map((g) => {
     // Hide gas billing section when no gas meter is configured
     if (g.title === "Gas Billing" && !hasGasMeter) return "";
@@ -416,6 +565,14 @@ export function renderSettings(
     let content: string;
     if (g.title === "Feed-in / Selling") {
       content = feedInSection;
+    } else if (g.title === "Time-of-Use Tariffs") {
+      content = timeOfUseSection;
+    } else if (g.title === "Reference Power Windows") {
+      content = referenceWindowsSection;
+    } else if (g.title === "Discounts") {
+      content = `<p class="muted" style="margin: 0 0 var(--sp-3) 0; font-size: 0.85rem;">
+        Positive values are treated as a monthly credit. The dashboard prorates it to the selected period and subtracts it before VAT.
+      </p>` + renderFields(g.fields);
     } else if (g.title === "Meter Fees") {
       content = `<p class="muted" style="margin: 0 0 var(--sp-3) 0; font-size: 0.85rem;">
         Each metering point has a fixed monthly rental/metering fee. Set the cost per meter below.

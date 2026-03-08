@@ -17,6 +17,7 @@ class BillingConfig:
     - feed_in_tariff: compensation per kWh sold back to the grid
     - compensation_fund_rate: renewable energy fund levy (often negative = credit)
     - electricity_tax_rate: government tax per kWh
+    - connect_discount: monthly contract discount/credit applied before VAT
     - vat_rate: VAT as decimal (0.08 = 8%)
     """
     energy_fixed_fee: float = 1.50
@@ -25,8 +26,10 @@ class BillingConfig:
     network_power_ref_rate: float = 19.27
     network_variable_rate: float = 0.0510
     reference_power_kw: float = 5.0
+    reference_power_windows: list = field(default_factory=list)  # [{label, day_group, start_time, end_time, reference_power_kw}]
     exceedance_rate: float = 0.1139
     feed_in_tariff: float = 0.08
+    consumption_rate_windows: list = field(default_factory=list)  # [{label, day_group, start_time, end_time, rate}]
     feed_in_rates: list = field(default_factory=list)  # [{meter_id, mode, tariff, sensor_entity}]
     meter_monthly_fees: list = field(default_factory=list)  # [{meter_id, label, fee}]
     gas_fixed_fee: float = 6.50
@@ -37,6 +40,7 @@ class BillingConfig:
     gas_vat_rate: float = 0.08
     compensation_fund_rate: float = 0.0010
     electricity_tax_rate: float = 0.0010
+    connect_discount: float = 0.0
     vat_rate: float = 0.08
     currency: str = "EUR"
     meter_has_gas: bool = False
@@ -55,8 +59,10 @@ class BillingConfig:
             "network_power_ref_rate": self.network_power_ref_rate,
             "network_variable_rate": self.network_variable_rate,
             "reference_power_kw": self.reference_power_kw,
+            "reference_power_windows": self.reference_power_windows,
             "exceedance_rate": self.exceedance_rate,
             "feed_in_tariff": self.feed_in_tariff,
+            "consumption_rate_windows": self.consumption_rate_windows,
             "feed_in_rates": self.feed_in_rates,
             "meter_monthly_fees": self.meter_monthly_fees,
             "gas_fixed_fee": self.gas_fixed_fee,
@@ -67,6 +73,7 @@ class BillingConfig:
             "gas_vat_rate": self.gas_vat_rate,
             "compensation_fund_rate": self.compensation_fund_rate,
             "electricity_tax_rate": self.electricity_tax_rate,
+            "connect_discount": self.connect_discount,
             "vat_rate": self.vat_rate,
             "currency": self.currency,
             "meter_has_gas": self.meter_has_gas,
@@ -85,8 +92,10 @@ class BillingConfig:
             network_power_ref_rate=data.get("network_power_ref_rate", 19.27),
             network_variable_rate=data.get("network_variable_rate", 0.0510),
             reference_power_kw=data.get("reference_power_kw", 5.0),
+            reference_power_windows=data.get("reference_power_windows", []),
             exceedance_rate=data.get("exceedance_rate", 0.1139),
             feed_in_tariff=data.get("feed_in_tariff", 0.08),
+            consumption_rate_windows=data.get("consumption_rate_windows", []),
             feed_in_rates=cls._migrate_feed_in_rates(data),
             meter_monthly_fees=data.get("meter_monthly_fees", []),
             gas_fixed_fee=data.get("gas_fixed_fee", 6.50),
@@ -97,6 +106,7 @@ class BillingConfig:
             gas_vat_rate=data.get("gas_vat_rate", 0.08),
             compensation_fund_rate=data.get("compensation_fund_rate", 0.0010),
             electricity_tax_rate=data.get("electricity_tax_rate", 0.0010),
+            connect_discount=data.get("connect_discount", 0.0),
             vat_rate=data.get("vat_rate", 0.08),
             currency=data.get("currency", "EUR"),
             meter_has_gas=data.get("meter_has_gas", False),

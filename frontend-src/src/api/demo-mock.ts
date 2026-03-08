@@ -77,8 +77,10 @@ function defaultBilling(): BillingConfig {
     network_power_ref_rate: 19.27,
     network_variable_rate: 0.051,
     reference_power_kw: 5.0,
+    reference_power_windows: [],
     exceedance_rate: 0.1139,
     feed_in_tariff: 0.08,
+    consumption_rate_windows: [],
     feed_in_rates: [
       { meter_id: "LU0000000000000000000000000DEMO01", mode: "fixed", tariff: 0.08, sensor_entity: "" },
     ],
@@ -90,6 +92,7 @@ function defaultBilling(): BillingConfig {
     gas_vat_rate: 0.08,
     compensation_fund_rate: 0.001,
     electricity_tax_rate: 0.001,
+    connect_discount: 0,
     vat_rate: 0.08,
     currency: "EUR",
     meter_has_gas: true,
@@ -207,15 +210,44 @@ function dateRangeFor(range: string): { start: string; end: string } {
 //  Peak / Exceedance helpers (mirrors dev-server-plugin.ts)
 // ═══════════════════════════════════════════════════════════════
 
+function matchesDayGroup(date: Date, dayGroup: string): boolean {
+  if (dayGroup === "weekdays") return date.getDay() >= 1 && date.getDay() <= 5;
+  if (dayGroup === "weekends") return date.getDay() === 0 || date.getDay() === 6;
+  return true;
+}
+
+function toMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map((part) => parseInt(part, 10) || 0);
+  return hours * 60 + minutes;
+}
+
+function resolveReferencePowerForTimestamp(date: Date, cfg: BillingConfig): number {
+  for (const window of cfg.reference_power_windows ?? []) {
+    if (!matchesDayGroup(date, window.day_group)) continue;
+    const nowMinutes = date.getHours() * 60 + date.getMinutes();
+    const startMinutes = toMinutes(window.start_time);
+    const endMinutes = toMinutes(window.end_time);
+    const inWindow = startMinutes === endMinutes
+      ? true
+      : startMinutes < endMinutes
+        ? nowMinutes >= startMinutes && nowMinutes < endMinutes
+        : nowMinutes >= startMinutes || nowMinutes < endMinutes;
+    if (inWindow) return window.reference_power_kw ?? cfg.reference_power_kw ?? 5;
+  }
+  return cfg.reference_power_kw ?? 5;
+}
+
 function computePeakAndExceedance(
-  items: Array<{ value: number }>,
-  refPowerKw: number,
+  items: Array<{ value: number; startedAt?: string }>,
+  cfg: BillingConfig,
 ): { peak_power_kw: number; exceedance_kwh: number } {
   let peak = 0;
   let exceedance = 0;
   for (const item of items) {
     const kw = item.value ?? 0;
     if (kw > peak) peak = kw;
+    const date = item.startedAt ? new Date(item.startedAt) : new Date();
+    const refPowerKw = resolveReferencePowerForTimestamp(date, cfg);
     if (kw > refPowerKw) {
       exceedance += (kw - refPowerKw) * 0.25;
     }
@@ -234,7 +266,6 @@ async function fetchPeakExceedance(
 ): Promise<{ peak_power_kw: number; exceedance_kwh: number }> {
   try {
     const cfg = loadBilling();
-    const refPower = cfg.reference_power_kw ?? 5;
     const startDt = new Date(startDate + "T00:00:00.000Z").toISOString();
     const endDt = new Date(endDate + "T23:59:59.999Z").toISOString();
 
@@ -242,7 +273,7 @@ async function fetchPeakExceedance(
       `/api/metering-points/${meterId}/time-series?obisCode=1-1:1.29.0&startDateTime=${encodeURIComponent(startDt)}&endDateTime=${encodeURIComponent(endDt)}`,
       creds,
     );
-    return computePeakAndExceedance(data?.items ?? [], refPower);
+    return computePeakAndExceedance(data?.items ?? [], cfg);
   } catch {
     return { peak_power_kw: 0, exceedance_kwh: 0 };
   }

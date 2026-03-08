@@ -9,7 +9,14 @@
  * - Compensation fund, electricity tax, VAT
  */
 import type { AppState } from "./App";
-import type { FeedInRate, MeterMonthlyFee } from "../api/leneda";
+import type {
+  FeedInRate,
+  MeterMonthlyFee,
+  DayGroup,
+  ConsumptionRateWindow,
+  ReferencePowerWindow,
+  TimeseriesItem,
+} from "../api/leneda";
 import { fmtNum } from "../utils/format";
 
 /**
@@ -84,6 +91,101 @@ function periodProration(
   return { days: periodDays, monthDays, factor: periodDays / monthDays };
 }
 
+function matchesDayGroup(day: number, dayGroup: DayGroup): boolean {
+  if (dayGroup === "all") return true;
+  if (dayGroup === "weekdays") return day >= 1 && day <= 5;
+  return day === 0 || day === 6;
+}
+
+function toMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map((part) => parseInt(part, 10) || 0);
+  return hours * 60 + minutes;
+}
+
+function matchesWindow(date: Date, dayGroup: DayGroup, startTime: string, endTime: string): boolean {
+  if (!matchesDayGroup(date.getDay(), dayGroup)) return false;
+
+  const nowMinutes = date.getHours() * 60 + date.getMinutes();
+  const startMinutes = toMinutes(startTime);
+  const endMinutes = toMinutes(endTime);
+
+  if (startMinutes === endMinutes) return true;
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  }
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+}
+
+function findConsumptionWindow(
+  date: Date,
+  windows: ConsumptionRateWindow[],
+): ConsumptionRateWindow | undefined {
+  return windows.find((window) =>
+    matchesWindow(date, window.day_group, window.start_time, window.end_time),
+  );
+}
+
+function findReferenceWindow(
+  date: Date,
+  windows: ReferencePowerWindow[],
+): ReferencePowerWindow | undefined {
+  return windows.find((window) =>
+    matchesWindow(date, window.day_group, window.start_time, window.end_time),
+  );
+}
+
+function calculateWindowedUsage(
+  items: TimeseriesItem[],
+  baseRate: number,
+  baseReferencePower: number,
+  rateWindows: ConsumptionRateWindow[],
+  referenceWindows: ReferencePowerWindow[],
+): {
+  energyCost: number;
+  exceedanceKwh: number;
+  peakPowerKw: number;
+  rateBreakdown: Array<{ label: string; rate: number; kwh: number }>;
+} {
+  const breakdown = new Map<string, { label: string; rate: number; kwh: number }>();
+  let energyCost = 0;
+  let exceedanceKwh = 0;
+  let peakPowerKw = 0;
+
+  for (const item of items) {
+    const kw = Number(item.value) || 0;
+    const kwh = kw * 0.25;
+    const timestamp = new Date(item.startedAt);
+    if (Number.isNaN(timestamp.getTime())) continue;
+
+    const rateWindow = findConsumptionWindow(timestamp, rateWindows);
+    const referenceWindow = findReferenceWindow(timestamp, referenceWindows);
+    const appliedRate = rateWindow?.rate ?? baseRate;
+    const appliedLabel = rateWindow?.label?.trim() || "Base tariff";
+    const appliedReference = referenceWindow?.reference_power_kw ?? baseReferencePower;
+
+    energyCost += kwh * appliedRate;
+    peakPowerKw = Math.max(peakPowerKw, kw);
+    if (kw > appliedReference) {
+      exceedanceKwh += (kw - appliedReference) * 0.25;
+    }
+
+    const key = `${appliedLabel}__${appliedRate}`;
+    const existing = breakdown.get(key);
+    if (existing) {
+      existing.kwh += kwh;
+    } else {
+      breakdown.set(key, { label: appliedLabel, rate: appliedRate, kwh });
+    }
+  }
+
+  return {
+    energyCost,
+    exceedanceKwh,
+    peakPowerKw,
+    rateBreakdown: Array.from(breakdown.values()).sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
 export function renderInvoice(state: AppState): string {
   const config = state.config;
   const d = state.rangeData;
@@ -109,6 +211,21 @@ export function renderInvoice(state: AppState): string {
   const gasEnergy = d.gas_energy || 0;
   const gasVolume = d.gas_volume || 0;
   const hasGas = gasEnergy > 0 || gasVolume > 0;
+  const rateWindows = config.consumption_rate_windows ?? [];
+  const referenceWindows = config.reference_power_windows ?? [];
+  const windowedUsage = state.consumptionTimeseries
+    ? calculateWindowedUsage(
+      state.consumptionTimeseries.items,
+      config.energy_variable_rate,
+      refPower,
+      rateWindows,
+      referenceWindows,
+    )
+    : null;
+  const usesTariffWindows = rateWindows.length > 0 && !!windowedUsage;
+  const usesReferenceWindows = referenceWindows.length > 0 && !!windowedUsage;
+  const effectivePeakPower = usesReferenceWindows ? windowedUsage!.peakPowerKw : peakPower;
+  const effectiveExceedanceKwh = usesReferenceWindows ? windowedUsage!.exceedanceKwh : exceedanceKwh;
 
   // ── Period proration ──
   // Fixed monthly fees are scaled to the viewed period length.
@@ -125,7 +242,7 @@ export function renderInvoice(state: AppState): string {
   // ── Cost calculation (Luxembourg model) ──
 
   // 1. Energy supplier costs
-  const energyCost = consumption * config.energy_variable_rate;
+  const energyCost = usesTariffWindows ? windowedUsage!.energyCost : consumption * config.energy_variable_rate;
 
   // 2. Network costs
   const networkVariableCost = consumption * config.network_variable_rate;
@@ -133,7 +250,7 @@ export function renderInvoice(state: AppState): string {
   // 3. Reference power exceedance (Referenzwert / Dépassement)
   //    exceedance_kwh is the total energy consumed above the reference power
   //    across all 15-min intervals, computed by the backend coordinator.
-  const exceedanceCost = exceedanceKwh * config.exceedance_rate;
+  const exceedanceCost = effectiveExceedanceKwh * config.exceedance_rate;
 
   // 3b. Per-meter monthly fees (extra metering points)
   const meterFees: MeterMonthlyFee[] = config.meter_monthly_fees ?? [];
@@ -142,6 +259,7 @@ export function renderInvoice(state: AppState): string {
   // 4. Taxes & levies
   const compensationCredit = consumption * config.compensation_fund_rate;
   const electricityTax = consumption * config.electricity_tax_rate;
+  const connectDiscount = Math.max(0, config.connect_discount ?? 0) * proFactor;
 
   // 5. Subtotal (costs) — fixed fees are prorated
   const subtotalCosts =
@@ -153,7 +271,8 @@ export function renderInvoice(state: AppState): string {
     exceedanceCost +
     meterFeesTotal +
     compensationCredit +
-    electricityTax;
+    electricityTax -
+    connectDiscount;
 
   const vat = subtotalCosts * config.vat_rate;
   const totalCosts = subtotalCosts + vat;
@@ -214,14 +333,38 @@ export function renderInvoice(state: AppState): string {
   const rangeLabel = state.range.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   // ── Exceedance warning ──
-  const exceedanceWarning = exceedanceKwh > 0
+  const exceedanceWarning = effectiveExceedanceKwh > 0
     ? `<div class="card exceedance-warning">
         <strong>⚠️ Reference Power Exceeded</strong>
-        <p>Peak: <strong>${fmtNum(peakPower, 1)} kW</strong> &mdash; Reference: ${fmtNum(refPower, 1)} kW</p>
-        <p>Total exceedance energy: <strong>${fmtNum(exceedanceKwh, 2)} kWh</strong></p>
+        <p>Peak: <strong>${fmtNum(effectivePeakPower, 1)} kW</strong> &mdash; ${usesReferenceWindows ? "Scheduled reference windows active" : `Reference: ${fmtNum(refPower, 1)} kW`}</p>
+        <p>Total exceedance energy: <strong>${fmtNum(effectiveExceedanceKwh, 2)} kWh</strong></p>
         <p class="muted">Surcharge: ${fmt(exceedanceCost)}</p>
       </div>`
     : "";
+
+  const energyRateRows = usesTariffWindows
+    ? windowedUsage!.rateBreakdown.map((entry) => `
+            <tr>
+              <td>${entry.label} (${fmtNum(entry.kwh)} kWh)</td>
+              <td style="text-align: right;">${fmtNum(entry.rate, 4)} ${currency}/kWh</td>
+              <td style="text-align: right;">${fmt(entry.kwh * entry.rate)}</td>
+            </tr>
+          `).join("")
+    : `
+            <tr>
+              <td>Variable (${fmtNum(consumption)} kWh)</td>
+              <td style="text-align: right;">${fmtNum(config.energy_variable_rate, 4)} ${currency}/kWh</td>
+              <td style="text-align: right;">${fmt(energyCost)}</td>
+            </tr>
+          `;
+
+  const referenceModeNote = usesReferenceWindows
+    ? `Scheduled windows active (${referenceWindows.length})`
+    : `${fmtNum(refPower, 1)} kW`;
+
+  const tariffModeNote = usesTariffWindows
+    ? `Time-of-use windows active (${rateWindows.length})`
+    : `${fmtNum(config.energy_variable_rate, 4)} ${currency}/kWh`;
 
   return `
     <section class="invoice-view">
@@ -253,11 +396,7 @@ export function renderInvoice(state: AppState): string {
               <td style="text-align: right;">${fmtNum(config.energy_fixed_fee, 2)} ${currency}/mo</td>
               <td style="text-align: right;">${fmt(proratedFixedFee)}</td>
             </tr>
-            <tr>
-              <td>Variable (${fmtNum(consumption)} kWh)</td>
-              <td style="text-align: right;">${fmtNum(config.energy_variable_rate, 4)} ${currency}/kWh</td>
-              <td style="text-align: right;">${fmt(energyCost)}</td>
-            </tr>
+            ${energyRateRows}
 
             <tr class="section-label"><td colspan="3">Network Operator</td></tr>
             <tr>
@@ -266,7 +405,7 @@ export function renderInvoice(state: AppState): string {
               <td style="text-align: right;">${fmt(proratedMetering)}</td>
             </tr>
             <tr>
-              <td>Power Reference (${fmtNum(refPower, 1)} kW) <span class="muted">(${proLabel})</span></td>
+              <td>Power Reference (${referenceModeNote}) <span class="muted">(${proLabel})</span></td>
               <td style="text-align: right;">${fmtNum(config.network_power_ref_rate, 2)} ${currency}/mo</td>
               <td style="text-align: right;">${fmt(proratedPowerRef)}</td>
             </tr>
@@ -275,8 +414,8 @@ export function renderInvoice(state: AppState): string {
               <td style="text-align: right;">${fmtNum(config.network_variable_rate, 4)} ${currency}/kWh</td>
               <td style="text-align: right;">${fmt(networkVariableCost)}</td>
             </tr>
-            <tr class="${exceedanceKwh > 0 ? "exceedance-row" : ""}">
-              <td>Exceedance (${fmtNum(exceedanceKwh, 2)} kWh over ref)</td>
+            <tr class="${effectiveExceedanceKwh > 0 ? "exceedance-row" : ""}">
+              <td>Exceedance (${fmtNum(effectiveExceedanceKwh, 2)} kWh over ref)</td>
               <td style="text-align: right;">${fmtNum(config.exceedance_rate, 4)} ${currency}/kWh</td>
               <td style="text-align: right;">${fmt(exceedanceCost)}</td>
             </tr>
@@ -303,6 +442,14 @@ export function renderInvoice(state: AppState): string {
               <td style="text-align: right;">${fmtNum(config.electricity_tax_rate, 4)} ${currency}/kWh</td>
               <td style="text-align: right;">${fmt(electricityTax)}</td>
             </tr>
+            ${connectDiscount > 0 ? `
+            <tr class="section-label"><td colspan="3">Discounts</td></tr>
+            <tr>
+              <td>Connect Discount <span class="muted">(${proLabel})</span></td>
+              <td style="text-align: right;">-${fmtNum(Math.max(0, config.connect_discount ?? 0), 2)} ${currency}/mo</td>
+              <td style="text-align: right;">-${fmt(connectDiscount)}</td>
+            </tr>
+            ` : ""}
 
             <tr class="subtotal-row">
               <td colspan="2">Subtotal (excl. VAT)</td>
@@ -347,7 +494,8 @@ export function renderInvoice(state: AppState): string {
         <p class="muted" style="line-height: var(--lh-relaxed);">
           This is an estimate based on your configured billing rates.
           Fixed monthly fees are prorated to the viewed period (${periodDays} of ${monthDays} days = ${fmtNum(proFactor * 100, 1)}%).
-          Peak power (${fmtNum(peakPower, 1)} kW) is compared against your reference power (${fmtNum(refPower, 1)} kW) &mdash; 
+          Supplier energy pricing: ${tariffModeNote}.
+          Peak power (${fmtNum(effectivePeakPower, 1)} kW) is compared against ${usesReferenceWindows ? "your scheduled reference windows" : `your reference power (${fmtNum(refPower, 1)} kW)`} &mdash; 
           every kWh consumed above the Referenzwert incurs a surcharge of ${fmtNum(config.exceedance_rate, 4)} ${currency}/kWh.
           Adjust rates in Settings.
         </p>

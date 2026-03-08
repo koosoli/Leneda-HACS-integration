@@ -79,6 +79,28 @@ No Home Assistant? No problem. The dashboard is available as a **hosted web app*
 2. Extract the `custom_components/leneda` folder into your HA `config/custom_components/` directory.
 3. Restart Home Assistant.
 
+### Option 3: Local Dashboard Testing (No `.bat` files)
+Run the dashboard locally without Home Assistant:
+
+Live dev server with hot reload:
+```bash
+cd frontend-src
+npm install
+npm run dev -- --host localhost --port 5175 --strictPort --open
+```
+
+Standalone local server using the built dashboard:
+```bash
+cd frontend-src
+npm install
+npm run build
+cd ../standalone
+node server.js
+```
+
+In both cases, open **http://localhost:5175**.  
+For the full standalone guide, see [standalone/README.md](standalone/README.md).
+
 ---
 
 ## ⚙️ Configuration

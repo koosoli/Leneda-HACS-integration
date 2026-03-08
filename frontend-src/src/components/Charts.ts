@@ -211,6 +211,13 @@ export function renderEnergyChart(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
+  const css = getComputedStyle(document.documentElement);
+  const clrMuted = css.getPropertyValue("--clr-muted").trim() || "#8b949e";
+  const clrText = css.getPropertyValue("--clr-text").trim() || "#e6edf3";
+  const clrTextSecondary = css.getPropertyValue("--clr-text-secondary").trim() || "#b1bac4";
+  const clrBorder = css.getPropertyValue("--clr-border").trim() || "#30363d";
+  const clrOverlay = css.getPropertyValue("--clr-overlay").trim() || "rgba(13, 17, 23, 0.95)";
+
   const showRefLine = unit === "kw" && referencePowerKw > 0;
 
   // Per-bar coloring for exceedance highlighting
@@ -295,7 +302,7 @@ export function renderEnergyChart(
         legend: {
           position: "top",
           labels: {
-            color: "#8b949e",
+            color: clrMuted,
             usePointStyle: true,
             pointStyle: "rectRounded",
             padding: 16,
@@ -328,10 +335,10 @@ export function renderEnergyChart(
           },
         },
         tooltip: {
-          backgroundColor: "rgba(13, 17, 23, 0.95)",
-          titleColor: "#e6edf3",
-          bodyColor: "#b1bac4",
-          borderColor: "#30363d",
+          backgroundColor: clrOverlay,
+          titleColor: clrText,
+          bodyColor: clrTextSecondary,
+          borderColor: clrBorder,
           borderWidth: 1,
           padding: 12,
           cornerRadius: 8,
@@ -404,12 +411,12 @@ export function renderEnergyChart(
             tooltipFormat: "PPp",
           },
           ticks: {
-            color: "#8b949e",
+            color: clrMuted,
             maxTicksLimit: 14,
             font: { size: 10 },
             maxRotation: 45,
           },
-          grid: { color: "rgba(48, 54, 61, 0.3)" },
+          grid: { color: clrBorder },
           // offset: true keeps bars centred on their time tick
           offset: true,
           stacked: true,
@@ -418,11 +425,11 @@ export function renderEnergyChart(
           beginAtZero: true,
           stacked: true,
           ticks: {
-            color: "#8b949e",
+            color: clrMuted,
             font: { size: 10 },
             callback(value) { return `${value} ${yLabel}`; },
           },
-          grid: { color: "rgba(48, 54, 61, 0.3)" },
+          grid: { color: clrBorder },
         },
       },
     },

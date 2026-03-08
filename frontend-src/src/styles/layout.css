@@ -187,7 +187,7 @@ a:hover {
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  color-scheme: dark;
+  color-scheme: var(--input-color-scheme);
   transition: border-color var(--duration) var(--ease),
     box-shadow var(--duration) var(--ease);
 }
@@ -293,17 +293,33 @@ a:hover {
   position: relative;
   width: 100%;
   padding: var(--sp-8);
-  background: var(--clr-bg);
+  background:
+    radial-gradient(circle at top, rgba(88, 166, 255, 0.08), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    var(--clr-bg);
   border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
   animation: scene-entrance 0.8s var(--ease-out);
 }
 
+.leneda-elite-flow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(248, 81, 73, 0.08), transparent 28%),
+    radial-gradient(circle at 80% 24%, rgba(63, 185, 80, 0.08), transparent 28%);
+  pointer-events: none;
+}
+
 .elite-header {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-6);
   margin-bottom: var(--sp-10);
+  position: relative;
+  z-index: 1;
 }
 
 /* Glass Floating Modules */
@@ -313,9 +329,9 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   padding: var(--sp-6);
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
@@ -385,6 +401,14 @@ a:hover {
   background: var(--clr-production);
 }
 
+.consumption-module {
+  box-shadow: 0 18px 40px rgba(248, 81, 73, 0.08);
+}
+
+.production-module {
+  box-shadow: 0 18px 40px rgba(63, 185, 80, 0.08);
+}
+
 @keyframes wave-rotate {
   from {
     transform: rotate(0deg);
@@ -399,7 +423,8 @@ a:hover {
 .elite-scene {
   position: relative;
   width: 100%;
-  height: 400px;
+  height: 420px;
+  z-index: 1;
 }
 
 .elite-main-svg {
@@ -407,45 +432,30 @@ a:hover {
   height: 100%;
 }
 
-/* Glass Badges */
-.elite-badges-grid {
-  position: absolute;
-  bottom: 0px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: var(--sp-4);
-  pointer-events: none;
+.scene-node-kicker {
+  fill: var(--clr-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.glass-badge {
-  pointer-events: auto;
-  padding: var(--sp-2) var(--sp-4);
-  background: rgba(22, 27, 34, 0.6);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--clr-border);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  transition: all 0.3s var(--ease);
+.scene-node-value {
+  fill: var(--clr-text);
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.glass-badge:hover {
-  background: var(--clr-surface-alt);
-  border-color: var(--clr-text-secondary);
-}
-
-.badge-label {
+.house-core-kicker {
+  fill: var(--clr-muted);
   font-size: 10px;
   font-weight: 700;
-  text-transform: uppercase;
-  color: var(--clr-muted);
+  letter-spacing: 0.08em;
 }
 
-.badge-value {
-  font-size: var(--text-base);
+.house-core-value {
+  fill: var(--clr-text);
+  font-size: 18px;
   font-weight: 800;
 }
 
@@ -482,6 +492,71 @@ a:hover {
 
 .highlight-blue {
   color: var(--clr-export) !important;
+}
+
+.flow-legend {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}
+
+.flow-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--clr-overlay);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--clr-overlay-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.flow-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  margin-top: 6px;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.02);
+}
+
+.flow-legend-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.flow-legend-copy strong {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--clr-text);
+}
+
+.flow-legend-copy span {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--clr-muted);
+}
+
+.flow-legend-item.solar .flow-legend-dot {
+  background: var(--clr-production);
+}
+
+.flow-legend-item.import .flow-legend-dot {
+  background: var(--clr-consumption);
+}
+
+.flow-legend-item.export .flow-legend-dot {
+  background: var(--clr-export);
+}
+
+.flow-legend-item.community .flow-legend-dot {
+  background: var(--clr-primary);
 }
 
 /* ── Form layout ───────────────────────────────────────────────── */
@@ -540,10 +615,35 @@ a:hover {
     box-shadow var(--duration) var(--ease);
 }
 
+.input-group select {
+  flex: 1;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--clr-bg);
+  color: var(--clr-text);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
 .input-group input:focus {
   outline: none;
   border-color: var(--clr-primary);
   box-shadow: 0 0 0 3px var(--clr-primary-muted);
+}
+
+.input-group select:focus {
+  outline: none;
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px var(--clr-primary-muted);
+}
+
+.schedule-window-inputs {
+  flex-wrap: wrap;
+}
+
+.schedule-window-inputs input {
+  min-width: 120px;
 }
 
 .input-unit {
@@ -884,21 +984,12 @@ a:hover {
   }
 
   .elite-scene {
-    height: 300px;
+    height: 320px;
   }
 
-  .elite-badges-grid {
-    position: relative;
-    bottom: 0;
-    flex-wrap: wrap;
+  .flow-legend {
+    grid-template-columns: 1fr;
     gap: var(--sp-2);
-    margin-top: var(--sp-4);
-  }
-
-  .glass-badge {
-    padding: var(--sp-1) var(--sp-3);
-    flex: 1 1 calc(50% - var(--sp-2));
-    justify-content: center;
   }
 
   .module-value {
@@ -940,10 +1031,14 @@ a:hover {
   }
 
   .elite-scene {
-    height: 240px;
+    height: 260px;
   }
-  
-  .glass-badge {
-    flex: 1 1 100%;
+
+  .scene-node-value {
+    font-size: 12px;
+  }
+
+  .flow-legend-item {
+    padding: var(--sp-3);
   }
 }

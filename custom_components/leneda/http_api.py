@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, CONF_API_KEY, CONF_ENERGY_ID, CONF_METER_HAS_GAS, CONF_METERING_POINT_ID, CONF_METERING_POINT_1_TYPES, CONF_REFERENCE_POWER_ENTITY, CONF_REFERENCE_POWER_STATIC, EXTRA_METER_SLOTS, OBIS_CODES
 from .models import BillingConfig
+from .storage import get_effective_reference_power
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +48,245 @@ def _get_first_coordinator(hass: HomeAssistant):
     return None
 
 
+def _get_coordinators(hass: HomeAssistant) -> list[Any]:
+    """Return all active Leneda coordinators."""
+    return [
+        val
+        for key, val in hass.data.get(DOMAIN, {}).items()
+        if key not in ("storage", "views_registered") and hasattr(val, "data")
+    ]
+
+
+def _get_preferred_coordinator(hass: HomeAssistant, meter_type: str | None = None) -> Any | None:
+    """Return a coordinator that has the requested meter type, or the first one."""
+    coordinators = _get_coordinators(hass)
+    if not coordinators:
+        return None
+    if meter_type is None:
+        return coordinators[0]
+
+    for coordinator in coordinators:
+        for _mid, types in getattr(coordinator, "meters", []):
+            if meter_type in (types or []):
+                return coordinator
+    return coordinators[0]
+
+
+def _iter_entry_meters(entry: Any) -> list[dict[str, Any]]:
+    """Extract all configured meters from a config entry."""
+    meters: list[dict[str, Any]] = []
+    m1_id = (entry.data.get(CONF_METERING_POINT_ID) or "").strip()
+    m1_types = entry.data.get(CONF_METERING_POINT_1_TYPES, ["consumption"])
+    if m1_id:
+        meters.append({"id": m1_id, "types": m1_types})
+
+    for id_key, types_key in EXTRA_METER_SLOTS:
+        mid = (entry.data.get(id_key) or "").strip()
+        mtypes = entry.data.get(types_key, [])
+        if mid:
+            meters.append({"id": mid, "types": mtypes})
+    return meters
+
+
+def _get_meter_routes(hass: HomeAssistant) -> dict[str, list[dict[str, Any]]]:
+    """Build a de-duplicated map of meter routes across all coordinators."""
+    routes: dict[str, list[dict[str, Any]]] = {
+        "consumption": [],
+        "production": [],
+        "gas": [],
+    }
+    seen: set[tuple[str, str]] = set()
+
+    for coordinator in _get_coordinators(hass):
+        for mid, types in getattr(coordinator, "meters", []):
+            meter_id = (mid or "").strip()
+            if not meter_id:
+                continue
+            for meter_type in (types or []):
+                if meter_type not in routes:
+                    continue
+                key = (meter_type, meter_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                routes[meter_type].append(
+                    {
+                        "meter_id": meter_id,
+                        "api_client": coordinator.api_client,
+                        "coordinator": coordinator,
+                    }
+                )
+
+    preferred = _get_preferred_coordinator(hass)
+    if preferred:
+        if not routes["consumption"] and getattr(preferred, "consumption_meter", ""):
+            routes["consumption"].append(
+                {
+                    "meter_id": preferred.consumption_meter,
+                    "api_client": preferred.api_client,
+                    "coordinator": preferred,
+                }
+            )
+        if not routes["production"] and getattr(preferred, "production_meter", ""):
+            routes["production"].append(
+                {
+                    "meter_id": preferred.production_meter,
+                    "api_client": preferred.api_client,
+                    "coordinator": preferred,
+                }
+            )
+        if not routes["gas"] and getattr(preferred, "has_gas", False) and getattr(preferred, "gas_meter", ""):
+            routes["gas"].append(
+                {
+                    "meter_id": preferred.gas_meter,
+                    "api_client": preferred.api_client,
+                    "coordinator": preferred,
+                }
+            )
+
+    return routes
+
+
+def _routes_for_obis(hass: HomeAssistant, obis: str) -> list[dict[str, Any]]:
+    """Return all meter routes that can serve a given OBIS code."""
+    routes = _get_meter_routes(hass)
+    if obis.startswith("7-"):
+        return routes["gas"]
+    if obis.startswith("1-1:2.") or obis.startswith("1-1:4.") or obis.startswith("1-65:2."):
+        return routes["production"]
+    return routes["consumption"]
+
+
+def _sum_aggregated_timeseries(result: dict[str, Any]) -> float:
+    """Sum a Leneda aggregatedTimeSeries payload."""
+    return sum(
+        item.get("value", 0) or 0
+        for item in result.get("aggregatedTimeSeries", [])
+        if item.get("value") is not None
+    )
+
+
+def _combine_cached_data(coordinators: list[Any]) -> dict[str, Any]:
+    """Combine cached coordinator payloads across multiple entries."""
+    combined: dict[str, Any] = {}
+    for coordinator in coordinators:
+        data = getattr(coordinator, "data", None) or {}
+        for key, value in data.items():
+            if value is None:
+                continue
+            if key.endswith("_peak_timestamp"):
+                combined.setdefault(key, value)
+                continue
+            if isinstance(value, (int, float)):
+                if ":" in key:
+                    combined[key] = max(float(combined.get(key, 0) or 0), float(value))
+                else:
+                    combined[key] = float(combined.get(key, 0) or 0) + float(value)
+                continue
+            combined[key] = value
+    return combined
+
+
+def _time_to_minutes(value: str) -> int:
+    """Convert HH:MM to minutes since midnight."""
+    try:
+        hour, minute = value.split(":", 1)
+        return int(hour) * 60 + int(minute)
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def _matches_day_group(dt: datetime, day_group: str) -> bool:
+    """Return True when the datetime matches the configured day group."""
+    if day_group == "weekdays":
+        return dt.weekday() < 5
+    if day_group == "weekends":
+        return dt.weekday() >= 5
+    return True
+
+
+def _matches_window(dt: datetime, day_group: str, start_time: str, end_time: str) -> bool:
+    """Check whether a datetime falls within a configured time window."""
+    if not _matches_day_group(dt, day_group):
+        return False
+
+    now_minutes = dt.hour * 60 + dt.minute
+    start_minutes = _time_to_minutes(start_time)
+    end_minutes = _time_to_minutes(end_time)
+
+    if start_minutes == end_minutes:
+        return True
+    if start_minutes < end_minutes:
+        return start_minutes <= now_minutes < end_minutes
+    return now_minutes >= start_minutes or now_minutes < end_minutes
+
+
+def _get_reference_power_for_dt(hass: HomeAssistant, entry: Any, dt: datetime) -> float | None:
+    """Return the scheduled reference power for a timestamp, or the base reference."""
+    base_ref = get_effective_reference_power(hass, entry)
+    storage = hass.data.get(DOMAIN, {}).get("storage")
+    if not storage:
+        return base_ref
+
+    windows = getattr(storage.billing_config, "reference_power_windows", []) or []
+    for window in windows:
+        if not isinstance(window, dict):
+            continue
+        if _matches_window(
+            dt,
+            window.get("day_group", "all"),
+            window.get("start_time", "00:00"),
+            window.get("end_time", "00:00"),
+        ):
+            try:
+                return float(window.get("reference_power_kw"))
+            except (TypeError, ValueError):
+                return base_ref
+    return base_ref
+
+
+def _has_reference_power_windows(hass: HomeAssistant) -> bool:
+    """Return True if any scheduled reference windows are configured."""
+    storage = hass.data.get(DOMAIN, {}).get("storage")
+    if not storage:
+        return False
+    windows = getattr(storage.billing_config, "reference_power_windows", []) or []
+    return any(isinstance(window, dict) for window in windows)
+
+
+async def _fetch_peak_and_exceedance(coordinator, start_dt: datetime, end_dt: datetime) -> dict[str, float]:
+    """Compute peak power and exceedance using the active reference-power schedule."""
+    peak_power_kw = 0.0
+    exceedance_kwh = 0.0
+
+    try:
+        c_meter = coordinator._meter_for_obis("1-1:1.29.0")
+        ts_data = await coordinator.api_client.async_get_metering_data(
+            c_meter, "1-1:1.29.0", start_dt, end_dt
+        )
+        items = ts_data.get("items", []) if isinstance(ts_data, dict) else []
+        for item in items:
+            try:
+                kw = float(item["value"])
+                if kw > peak_power_kw:
+                    peak_power_kw = kw
+
+                started_at = item.get("startedAt")
+                item_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00")) if started_at else start_dt
+                ref_power = _get_reference_power_for_dt(coordinator.hass, coordinator.entry, item_dt)
+                if ref_power is not None and kw > ref_power:
+                    exceedance_kwh += (kw - ref_power) * 0.25
+            except (ValueError, TypeError, KeyError):
+                continue
+    except Exception:
+        pass
+
+    return {
+        "peak_power_kw": round(peak_power_kw, 2),
+        "exceedance_kwh": round(exceedance_kwh, 4),
+    }
+
+
 # ─── Data endpoints ──────────────────────────────────────────────
 
 class LenedaDataView(HomeAssistantView):
@@ -59,12 +299,13 @@ class LenedaDataView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
         range_type = request.query.get("range", "yesterday")
-        coordinator = _get_first_coordinator(hass)
+        coordinator = _get_preferred_coordinator(hass, "consumption")
+        coordinators = _get_coordinators(hass)
 
-        if not coordinator or not coordinator.data:
+        if not coordinator or not coordinators or not any(getattr(c, "data", None) for c in coordinators):
             return self.json({"error": "no_data"}, status_code=503)
 
-        cd = coordinator.data
+        cd = _combine_cached_data(coordinators)
 
         # Mapping determines which coordinator keys to use for preset ranges.
         # If a range is not in this mapping (like this_year), we skip coordinator data and fetch live.
@@ -163,7 +404,7 @@ class LenedaDataView(HomeAssistantView):
         # Initialize response
         response = {
             "range": range_type,
-            "metering_point": coordinator.metering_point_id,
+            "metering_point": coordinator.metering_point_id if len(coordinators) == 1 else "multiple",
             "start": s.isoformat() if s else None,
             "end": e.isoformat() if e else None,
         }
@@ -184,13 +425,13 @@ class LenedaDataView(HomeAssistantView):
                 "peak_power_kw": peak_power,
                 "exceedance_kwh": cd.get(keys["exceedance"], 0) if keys.get("exceedance") else 0,
             })
+            if _has_reference_power_windows(hass) and s and e:
+                response.update(await _fetch_peak_and_exceedance(coordinator, s, e))
         elif range_type in ("this_year", "last_year"):
             # Fetch live data for yearly ranges
             try:
-                live_data = await _fetch_live_aggregated_data(coordinator, s, e)
+                live_data = await _fetch_live_aggregated_data(hass, s, e)
                 response.update(live_data)
-                # Gas is not natively aggregated for year in coordinator cache, set to zero for now
-                response.update({"gas_energy": 0, "gas_volume": 0})
             except Exception as exc:
                 _LOGGER.error("Error fetching live yearly data: %s", exc)
                 return self.json({"error": str(exc)}, status_code=500)
@@ -222,12 +463,13 @@ class LenedaCustomDataView(HomeAssistantView):
         except ValueError:
             return self.json({"error": "Invalid date format"}, status_code=400)
 
-        coordinator = _get_first_coordinator(hass)
-        if not coordinator:
+        coordinator = _get_preferred_coordinator(hass, "consumption") or _get_first_coordinator(hass)
+        routes = _routes_for_obis(hass, obis)
+        if not coordinator or not routes:
             return self.json({"error": "no_data"}, status_code=503)
 
         try:
-            live_data = await _fetch_live_aggregated_data(coordinator, start_dt, end_dt)
+            live_data = await _fetch_live_aggregated_data(hass, start_dt, end_dt)
             response = {
                 "start": start_str,
                 "end": end_str,
@@ -238,7 +480,7 @@ class LenedaCustomDataView(HomeAssistantView):
             _LOGGER.error("Error fetching custom range data: %s", exc)
             return self.json({"error": str(exc)}, status_code=500)
 
-async def _fetch_live_aggregated_data(coordinator, start_dt, end_dt):
+async def _fetch_live_aggregated_data(hass: HomeAssistant, start_dt, end_dt):
     """Fetch and sum aggregated data for any arbitrary date range."""
     import asyncio as _aio
 
@@ -247,95 +489,51 @@ async def _fetch_live_aggregated_data(coordinator, start_dt, end_dt):
     if (end_dt - start_dt).days > 35:
         agg_level = "Month"
 
-    c_data = await coordinator.api_client.async_get_aggregated_metering_data(
-        coordinator._meter_for_obis("1-1:1.29.0"), "1-1:1.29.0", start_dt, end_dt, agg_level
-    )
+    async def _fetch_sum(routes: list[dict[str, Any]], obis: str) -> float:
+        if not routes:
+            return 0.0
+        results = await _aio.gather(*[
+            route["api_client"].async_get_aggregated_metering_data(
+                route["meter_id"], obis, start_dt, end_dt, agg_level
+            )
+            for route in routes
+        ], return_exceptions=True)
+        total = 0.0
+        for result in results:
+            if isinstance(result, dict):
+                total += _sum_aggregated_timeseries(result)
+            elif isinstance(result, Exception):
+                _LOGGER.error("Error fetching aggregated data for %s: %s", obis, result)
+        return total
 
-    # Sum production across all production meters
-    prod_meters = getattr(coordinator, "production_meters", [coordinator._meter_for_obis("1-1:2.29.0")])
-    p_results = await _aio.gather(*[
-        coordinator.api_client.async_get_aggregated_metering_data(mid, "1-1:2.29.0", start_dt, end_dt, agg_level)
-        for mid in prod_meters
-    ], return_exceptions=True)
-
-    # Sum export across meters
-    EXPORT_CODE = "1-65:2.29.9"
-    e_data = await coordinator.api_client.async_get_aggregated_metering_data(
-        coordinator._meter_for_obis(EXPORT_CODE), EXPORT_CODE, start_dt, end_dt, agg_level
-    )
+    consumption_routes = _get_meter_routes(hass)["consumption"]
+    production_routes = _get_meter_routes(hass)["production"]
+    gas_routes = _get_meter_routes(hass)["gas"]
 
     # Shared layers (1-4)
     SHARING_LAYERS = ["1", "2", "3", "4"]
 
-    # Shared With Me (Consumption side sharing)
-    c_meter = coordinator._meter_for_obis("1-1:1.29.0")
-    swm_results = await _aio.gather(*[
-        coordinator.api_client.async_get_aggregated_metering_data(c_meter, f"1-65:1.29.{layer}", start_dt, end_dt, agg_level)
-        for layer in SHARING_LAYERS
-    ], return_exceptions=True)
+    c_val = await _fetch_sum(consumption_routes, "1-1:1.29.0")
+    p_val = await _fetch_sum(production_routes, "1-1:2.29.0")
+    e_val = await _fetch_sum(production_routes, "1-65:2.29.9")
+    gas_energy = await _fetch_sum(gas_routes, "7-20:99.33.17")
+    gas_volume = await _fetch_sum(gas_routes, "7-1:99.23.15")
 
-    # Shared (Production side sharing)
-    shared_results = []
-    for mid in prod_meters:
-        meter_shared = await _aio.gather(*[
-            coordinator.api_client.async_get_aggregated_metering_data(mid, f"1-65:2.29.{layer}", start_dt, end_dt, agg_level)
-            for layer in SHARING_LAYERS
-        ], return_exceptions=True)
-        shared_results.extend(meter_shared)
+    swm_val = 0.0
+    for layer in SHARING_LAYERS:
+        swm_val += await _fetch_sum(consumption_routes, f"1-65:1.29.{layer}")
 
-    c_val = 0
-    if c_data.get("aggregatedTimeSeries"):
-        c_val = sum(item.get("value", 0) for item in c_data["aggregatedTimeSeries"] if item.get("value") is not None)
-
-    p_val = 0
-    for p_data in p_results:
-        if isinstance(p_data, dict) and p_data.get("aggregatedTimeSeries"):
-            p_val += sum(item.get("value", 0) for item in p_data["aggregatedTimeSeries"] if item.get("value") is not None)
-
-    e_val = 0
-    if e_data.get("aggregatedTimeSeries"):
-        e_val = sum(item.get("value", 0) for item in e_data["aggregatedTimeSeries"] if item.get("value") is not None)
-
-    swm_val = 0
-    for s_data in swm_results:
-        if isinstance(s_data, dict) and s_data.get("aggregatedTimeSeries"):
-            swm_val += sum(item.get("value", 0) for item in s_data["aggregatedTimeSeries"] if item.get("value") is not None)
-
-    s_val = 0
-    for s_data in shared_results:
-        if isinstance(s_data, dict) and s_data.get("aggregatedTimeSeries"):
-            s_val += sum(item.get("value", 0) for item in s_data["aggregatedTimeSeries"] if item.get("value") is not None)
+    s_val = 0.0
+    for layer in SHARING_LAYERS:
+        s_val += await _fetch_sum(production_routes, f"1-65:2.29.{layer}")
 
     sc_val = max(0, p_val - e_val)
 
-    # Peak power & exceedance
-    peak_power_kw = 0.0
-    exceedance_kwh = 0.0
-    try:
-        # Note: 15-min data fetch might be limited for very large ranges.
-        ts_data = await coordinator.api_client.async_get_metering_data(
-            c_meter, "1-1:1.29.0", start_dt, end_dt
-        )
-        from .const import CONF_REFERENCE_POWER_ENTITY, CONF_REFERENCE_POWER_STATIC
-        ref_power = coordinator.entry.data.get(CONF_REFERENCE_POWER_STATIC, 5.0)
-        ref_entity = coordinator.entry.data.get(CONF_REFERENCE_POWER_ENTITY)
-        if ref_entity:
-            ref_state = coordinator.hass.states.get(ref_entity)
-            if ref_state and ref_state.state not in ("unknown", "unavailable"):
-                ref_power = float(ref_state.state)
-
-        items = ts_data.get("items", []) if isinstance(ts_data, dict) else []
-        for item in items:
-            try:
-                kw = float(item["value"])
-                if kw > peak_power_kw:
-                    peak_power_kw = kw
-                if kw > ref_power:
-                    exceedance_kwh += (kw - ref_power) * 0.25
-            except (ValueError, TypeError):
-                continue
-    except Exception:
-        pass
+    peak_coordinator = _get_preferred_coordinator(hass, "consumption") or _get_first_coordinator(hass)
+    peak_exceedance = await _fetch_peak_and_exceedance(peak_coordinator, start_dt, end_dt) if peak_coordinator else {
+        "peak_power_kw": 0.0,
+        "exceedance_kwh": 0.0,
+    }
 
     return {
         "consumption": round(c_val, 4),
@@ -344,8 +542,9 @@ async def _fetch_live_aggregated_data(coordinator, start_dt, end_dt):
         "self_consumed": round(sc_val, 4),
         "shared": round(s_val, 4),
         "shared_with_me": round(swm_val, 4),
-        "peak_power_kw": round(peak_power_kw, 2),
-        "exceedance_kwh": round(exceedance_kwh, 4),
+        "gas_energy": round(gas_energy, 4),
+        "gas_volume": round(gas_volume, 4),
+        **peak_exceedance,
     }
 
 
@@ -382,43 +581,30 @@ class LenedaTimeseriesView(HomeAssistantView):
             end_dt = start_dt.replace(hour=23, minute=59, second=59)
 
         try:
-            # Check if this is a production OBIS code with multiple production meters
-            is_prod_obis = (obis.startswith("1-1:2.") or obis.startswith("1-1:4.") or obis.startswith("1-65:2."))
-            prod_meters = getattr(coordinator, "production_meters", [])
+            all_results = await _aio.gather(*[
+                route["api_client"].async_get_metering_data(route["meter_id"], obis, start_dt, end_dt)
+                for route in routes
+            ], return_exceptions=True)
 
-            if is_prod_obis and len(prod_meters) > 1:
-                # Query ALL production meters and merge by timestamp
-                all_results = await _aio.gather(*[
-                    coordinator.api_client.async_get_metering_data(mid, obis, start_dt, end_dt)
-                    for mid in prod_meters
-                ], return_exceptions=True)
+            merged: dict[str, float] = {}
+            unit = "kW"
+            interval = "PT15M"
+            for result in all_results:
+                if isinstance(result, dict):
+                    unit = result.get("unit", unit) or unit
+                    interval = result.get("intervalLength", interval) or interval
+                    for item in result.get("items", []):
+                        ts = item.get("startedAt", "")
+                        merged[ts] = merged.get(ts, 0) + (item.get("value", 0) or 0)
+                elif isinstance(result, Exception):
+                    _LOGGER.error("Error fetching timeseries for %s: %s", obis, result)
 
-                merged: dict[str, float] = {}
-                unit = "kW"
-                interval = "PT15M"
-                for result in all_results:
-                    if isinstance(result, dict):
-                        unit = result.get("unit", unit) or "kW"
-                        interval = result.get("intervalLength", interval) or "PT15M"
-                        for item in result.get("items", []):
-                            ts = item.get("startedAt", "")
-                            merged[ts] = merged.get(ts, 0) + (item.get("value", 0) or 0)
-                    elif isinstance(result, Exception):
-                        _LOGGER.error("Error fetching timeseries for production meter: %s", result)
-
-                items = [{"value": v, "startedAt": k, "type": "measured", "version": 1, "calculated": False}
-                         for k, v in sorted(merged.items())]
-                return self.json({"obis": obis, "unit": unit, "interval": interval, "items": items})
-
-            # Single-meter path (consumption, gas, or single production meter)
-            result = await coordinator.api_client.async_get_metering_data(
-                coordinator._meter_for_obis(obis), obis, start_dt, end_dt
-            )
-            items = result.get("items", []) if isinstance(result, dict) else []
+            items = [{"value": v, "startedAt": k, "type": "measured", "version": 1, "calculated": False}
+                     for k, v in sorted(merged.items())]
             return self.json({
                 "obis": obis,
-                "unit": result.get("unit", "kW"),
-                "interval": result.get("intervalLength", "PT15M"),
+                "unit": unit,
+                "interval": interval,
                 "items": items,
             })
         except Exception as e:
@@ -439,8 +625,9 @@ class LenedaPerMeterTimeseriesView(HomeAssistantView):
         start_str = request.query.get("start")
         end_str = request.query.get("end")
 
-        coordinator = _get_first_coordinator(hass)
-        if not coordinator:
+        coordinator = _get_preferred_coordinator(hass, "production") or _get_first_coordinator(hass)
+        routes = _get_meter_routes(hass)["production"]
+        if not coordinator or not routes:
             return self.json({"error": "no_data"}, status_code=503)
 
         from homeassistant.util import dt as dt_util
@@ -457,18 +644,15 @@ class LenedaPerMeterTimeseriesView(HomeAssistantView):
             start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
             end_dt = start_dt.replace(hour=23, minute=59, second=59)
 
-        prod_meters = getattr(coordinator, "production_meters", [])
-        if not prod_meters:
-            prod_meters = [coordinator.production_meter]
-
         try:
             all_results = await _aio.gather(*[
-                coordinator.api_client.async_get_metering_data(mid, obis, start_dt, end_dt)
-                for mid in prod_meters
+                route["api_client"].async_get_metering_data(route["meter_id"], obis, start_dt, end_dt)
+                for route in routes
             ], return_exceptions=True)
 
             meters_data = []
-            for mid, result in zip(prod_meters, all_results):
+            for route, result in zip(routes, all_results):
+                mid = route["meter_id"]
                 if isinstance(result, dict):
                     meters_data.append({
                         "meter_id": mid,
@@ -497,13 +681,15 @@ class LenedaSensorsView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
-        coordinator = _get_first_coordinator(hass)
+        coordinator = _get_preferred_coordinator(hass, "consumption") or _get_first_coordinator(hass)
+        coordinators = _get_coordinators(hass)
 
-        if not coordinator or not coordinator.data:
+        if not coordinator or not coordinators or not any(getattr(c, "data", None) for c in coordinators):
             return self.json({"sensors": []})
 
+        data = _combine_cached_data(coordinators)
         sensors = []
-        for key, value in coordinator.data.items():
+        for key, value in data.items():
             if key.endswith("_peak_timestamp"):
                 continue
             meta = OBIS_CODES.get(key, {})
@@ -512,10 +698,13 @@ class LenedaSensorsView(HomeAssistantView):
                 "value": value,
                 "name": meta.get("name", key),
                 "unit": meta.get("unit", "kWh"),
-                "peak_timestamp": coordinator.data.get(f"{key}_peak_timestamp"),
+                "peak_timestamp": data.get(f"{key}_peak_timestamp"),
             })
 
-        return self.json({"sensors": sensors, "metering_point": coordinator.metering_point_id})
+        return self.json({
+            "sensors": sensors,
+            "metering_point": coordinator.metering_point_id if len(coordinators) == 1 else "multiple",
+        })
 
 
 # ─── Config endpoints ────────────────────────────────────────────
@@ -534,28 +723,33 @@ class LenedaConfigView(HomeAssistantView):
             return self.json({})
 
         config_dict = storage.billing_config.to_dict()
+        entry = None
 
         # Merge HA entry credentials (read-only) so the dashboard knows the meter config
         entries = hass.config_entries.async_entries(DOMAIN)
         if entries:
             entry = entries[0]
-            # Build meters list for frontend
-            meters = []
-            m1_id = entry.data.get(CONF_METERING_POINT_ID, "")
-            m1_types = entry.data.get(CONF_METERING_POINT_1_TYPES, ["consumption"])
-            if m1_id:
-                meters.append({"id": m1_id, "types": m1_types})
-            all_types = list(m1_types)
-            for id_key, types_key in EXTRA_METER_SLOTS:
-                mid = (entry.data.get(id_key) or "").strip()
-                mtypes = entry.data.get(types_key, [])
-                if mid:
-                    meters.append({"id": mid, "types": mtypes})
-                    all_types.extend(mtypes)
+            meters: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            all_types: list[str] = []
+            for current_entry in entries:
+                for meter in _iter_entry_meters(current_entry):
+                    meter_id = meter["id"]
+                    if meter_id in seen:
+                        continue
+                    seen.add(meter_id)
+                    meters.append(meter)
+                    all_types.extend(meter.get("types", []))
             config_dict["meters"] = meters
-            config_dict["ha_meter_id"] = m1_id  # backward compat
+            config_dict["ha_meter_id"] = meters[0]["id"] if meters else ""  # backward compat
             # Derive meter_has_gas from type config
-            config_dict["meter_has_gas"] = "gas" in all_types or entry.data.get(CONF_METER_HAS_GAS, False)
+            config_dict["meter_has_gas"] = "gas" in all_types or any(
+                current_entry.data.get(CONF_METER_HAS_GAS, False) for current_entry in entries
+            )
+
+        effective_reference_power = get_effective_reference_power(hass, entry)
+        if effective_reference_power is not None:
+            config_dict["reference_power_kw"] = effective_reference_power
 
         # Resolve feed-in sensor values for each per-meter rate entry
         feed_in_rates = config_dict.get("feed_in_rates", [])

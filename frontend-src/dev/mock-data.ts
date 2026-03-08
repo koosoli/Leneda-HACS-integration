@@ -215,6 +215,7 @@ const DEFAULT_BILLING: BillingConfig = {
   gas_vat_rate: 0.08,
   compensation_fund_rate: 0.0010,
   electricity_tax_rate: 0.001,
+  connect_discount: 0,
   vat_rate: 0.08,
   currency: "EUR",
   meter_has_gas: true,

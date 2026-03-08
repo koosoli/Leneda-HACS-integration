@@ -293,6 +293,7 @@
   align-items: center;
   gap: var(--sp-1);
   height: 100%;
+  width: 100%;
 }
 
 .nav-btn {
@@ -331,6 +332,78 @@
 
 .nav-label {
   line-height: 1;
+}
+
+.navbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.theme-toggle,
+.navbar-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--clr-border);
+  background: var(--clr-surface-hover);
+  color: var(--clr-text);
+  transition: transform var(--duration-md) var(--ease), border-color var(--duration-md) var(--ease), background var(--duration-md) var(--ease);
+}
+
+.theme-toggle {
+  gap: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.theme-toggle:hover,
+.navbar-icon-link:hover {
+  transform: translateY(-1px);
+  border-color: var(--clr-primary);
+  background: var(--clr-primary-muted);
+}
+
+.theme-toggle-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.theme-toggle-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.navbar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ffdd00 0%, #fbb034 100%);
+  color: #000;
+  padding: 6px 16px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(251, 176, 52, 0.3);
+  transition: transform var(--duration-md) var(--ease), box-shadow var(--duration-md) var(--ease);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.navbar-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(251, 176, 52, 0.25);
+  text-decoration: none;
+}
+
+.navbar-icon-link {
+  width: 36px;
+  text-decoration: none;
 }
 
 /* ── Loading states ────────────────────────────────────────────── */
@@ -687,5 +760,21 @@
     margin-right: 0;
     padding-right: 0;
     flex: 1;
+  }
+
+  .navbar-actions {
+    margin-left: 0;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    padding-right: 0;
+    margin-top: var(--sp-3);
+  }
+
+  .theme-toggle,
+  .navbar-cta,
+  .navbar-icon-link {
+    width: 100%;
+    justify-content: center;
   }
 }

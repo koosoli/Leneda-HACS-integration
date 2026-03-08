@@ -9,9 +9,11 @@ import {
   fetchConfig,
   fetchMode,
   fetchCredentials,
+  fetchTimeseries,
   type RangeData,
   type TimeRange,
   type SensorsResponse,
+  type TimeseriesResponse,
   type BillingConfig,
   type Credentials,
   type MeterConfig,
@@ -25,6 +27,7 @@ import { renderNavBar } from "./NavBar";
 // ── localStorage credential helpers (persist across reloads, never in git) ──
 
 const CREDS_STORAGE_KEY = "leneda_credentials";
+const THEME_STORAGE_KEY = "leneda_theme";
 
 function loadLocalCredentials(): Credentials | null {
   try {
@@ -40,6 +43,23 @@ function saveLocalCredentials(creds: Credentials): void {
   } catch { /* storage full or private mode — ignore */ }
 }
 
+export type ThemeMode = "dark" | "light";
+
+function getPreferredTheme(): ThemeMode {
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw === "dark" || raw === "light") return raw;
+  } catch { /* ignore */ }
+
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function saveTheme(theme: ThemeMode): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch { /* ignore */ }
+}
+
 export type Tab = "dashboard" | "sensors" | "invoice" | "settings";
 
 export interface AppState {
@@ -49,6 +69,7 @@ export interface AppState {
   customEnd: string;
   chartUnit: "kw" | "kwh";
   rangeData: RangeData | null;
+  consumptionTimeseries: TimeseriesResponse | null;
   sensors: SensorsResponse | null;
   config: BillingConfig | null;
   loading: boolean;
@@ -56,6 +77,7 @@ export interface AppState {
   mode: "ha" | "standalone";
   credentials: Credentials | null;
   isMenuOpen: boolean;
+  theme: ThemeMode;
 }
 
 export class LenedaApp {
@@ -67,6 +89,7 @@ export class LenedaApp {
     customEnd: "",
     chartUnit: "kw",
     rangeData: null,
+    consumptionTimeseries: null,
     sensors: null,
     config: null,
     loading: true,
@@ -74,6 +97,7 @@ export class LenedaApp {
     mode: "ha",
     credentials: null,
     isMenuOpen: false,
+    theme: getPreferredTheme(),
   };
 
   /** Pre-zoom state — restored when user clicks "Reset Zoom" */
@@ -86,6 +110,7 @@ export class LenedaApp {
   }
 
   async mount(): Promise<void> {
+    this.applyTheme();
     this.render();
 
     // Detect deployment mode first
@@ -142,7 +167,10 @@ export class LenedaApp {
         fetchSensors(),
         fetchConfig(),
       ]);
+      const { start, end } = this.getDateRangeISO();
+      const consumptionTimeseries = await fetchTimeseries("1-1:1.29.0", start, end);
       this.state.rangeData = rangeData;
+      this.state.consumptionTimeseries = consumptionTimeseries;
       this.state.sensors = sensors;
       this.state.config = config;
     } catch (e) {
@@ -176,7 +204,13 @@ export class LenedaApp {
     this.state.loading = true;
     this.render();
     try {
-      this.state.rangeData = await fetchRangeData(range);
+      const { start, end } = this.getDateRangeISO();
+      const [rangeData, consumptionTimeseries] = await Promise.all([
+        fetchRangeData(range),
+        fetchTimeseries("1-1:1.29.0", start, end),
+      ]);
+      this.state.rangeData = rangeData;
+      this.state.consumptionTimeseries = consumptionTimeseries;
     } catch (e) {
       this.state.error =
         e instanceof Error ? e.message : "Failed to load data";
@@ -196,7 +230,14 @@ export class LenedaApp {
 
     try {
       const { fetchCustomData } = await import("../api/leneda");
-      const data = await fetchCustomData(customStart, customEnd);
+      const [data, consumptionTimeseries] = await Promise.all([
+        fetchCustomData(customStart, customEnd),
+        fetchTimeseries(
+          "1-1:1.29.0",
+          new Date(customStart + "T00:00:00").toISOString(),
+          new Date(customEnd + "T23:59:59.999").toISOString(),
+        ),
+      ]);
       this.state.rangeData = {
         range: "custom",
         consumption: data.consumption,
@@ -209,6 +250,7 @@ export class LenedaApp {
         exceedance_kwh: data.exceedance_kwh ?? 0,
         metering_point: data.metering_point ?? "",
       };
+      this.state.consumptionTimeseries = consumptionTimeseries;
     } catch (e) {
       this.state.error =
         e instanceof Error ? e.message : "Failed to load custom data";
@@ -245,14 +287,53 @@ export class LenedaApp {
     this.render();
   }
 
+  private applyTheme(): void {
+    document.documentElement.dataset.theme = this.state.theme;
+  }
+
+  private setTheme(theme: ThemeMode): void {
+    if (theme === this.state.theme) return;
+    this.state.theme = theme;
+    saveTheme(theme);
+    this.applyTheme();
+    this.render();
+  }
+
+  private toggleTheme(): void {
+    this.setTheme(this.state.theme === "dark" ? "light" : "dark");
+  }
+
+  private getMainContentScrollTop(): number {
+    const main = this.root.querySelector(".main-content") as HTMLElement | null;
+    if (main) return main.scrollTop;
+    return window.scrollY || document.documentElement.scrollTop || 0;
+  }
+
+  private restoreMainContentScrollTop(scrollTop: number): void {
+    requestAnimationFrame(() => {
+      const main = this.root.querySelector(".main-content") as HTMLElement | null;
+      if (main) {
+        main.scrollTop = scrollTop;
+      } else {
+        window.scrollTo({ top: scrollTop });
+      }
+    });
+  }
+
+  private renderPreserveMainScroll(): void {
+    const scrollTop = this.getMainContentScrollTop();
+    this.render();
+    this.restoreMainContentScrollTop(scrollTop);
+  }
+
   private render(): void {
-    const { tab, loading, error } = this.state;
+    const { tab, loading, error, theme } = this.state;
 
     // ── Skeleton while loading ──
     if (loading && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => { })}
+          ${renderNavBar(tab, (_t) => { }, false, theme)}
           <main class="main-content">
             <div class="loading-state">
               <div class="spinner"></div>
@@ -261,6 +342,7 @@ export class LenedaApp {
           </main>
         </div>
       `;
+      this.attachNavListeners();
       return;
     }
 
@@ -268,7 +350,7 @@ export class LenedaApp {
     if (error && !this.state.rangeData) {
       this.root.innerHTML = `
         <div class="app-shell">
-          ${renderNavBar(tab, (_t) => { })}
+          ${renderNavBar(tab, (_t) => { }, false, theme)}
           <main class="main-content">
             <div class="error-state">
               <h2>Connection Error</h2>
@@ -278,6 +360,7 @@ export class LenedaApp {
           </main>
         </div>
       `;
+      this.attachNavListeners();
       this.root.querySelector("#retry-btn")?.addEventListener("click", () => this.loadData());
       return;
     }
@@ -301,7 +384,7 @@ export class LenedaApp {
 
     this.root.innerHTML = `
       <div class="app-shell">
-        ${renderNavBar(tab, (t) => this.changeTab(t), this.state.isMenuOpen)}
+        ${renderNavBar(tab, (t) => this.changeTab(t), this.state.isMenuOpen, theme)}
         <main class="main-content">
           ${loading ? '<div class="loading-bar"></div>' : ""}
           ${tabContent}
@@ -319,6 +402,10 @@ export class LenedaApp {
     // Mobile menu toggle
     this.root.querySelector(".menu-toggle")?.addEventListener("click", () => {
       this.toggleMenu();
+    });
+
+    this.root.querySelector("[data-theme-toggle]")?.addEventListener("click", () => {
+      this.toggleTheme();
     });
 
     this.root.querySelectorAll("[data-tab]").forEach((btn) => {
@@ -413,7 +500,7 @@ export class LenedaApp {
           };
           this.state.credentials = updated;
           saveLocalCredentials(updated);
-          this.render();
+          this.renderPreserveMainScroll();
         }
       });
 
@@ -431,7 +518,7 @@ export class LenedaApp {
           };
           this.state.credentials = updated;
           saveLocalCredentials(updated);
-          this.render();
+          this.renderPreserveMainScroll();
         });
       });
 
@@ -503,6 +590,185 @@ export class LenedaApp {
     const form = this.root.querySelector("#settings-form") as HTMLFormElement | null;
     if (!form) return;
 
+    const collectConsumptionWindowsFromForm = (fd: FormData) => {
+      const windows = [];
+      for (let i = 0; i < 24; i++) {
+        const label = fd.get(`consumption_window_${i}_label`) as string | null;
+        const dayGroup = fd.get(`consumption_window_${i}_day_group`) as string | null;
+        const startTime = fd.get(`consumption_window_${i}_start_time`) as string | null;
+        const endTime = fd.get(`consumption_window_${i}_end_time`) as string | null;
+        const rate = fd.get(`consumption_window_${i}_rate`) as string | null;
+        if (label === null && dayGroup === null && startTime === null && endTime === null && rate === null) break;
+        windows.push({
+          label: (label ?? "").trim() || `Window ${i + 1}`,
+          day_group: (dayGroup ?? "all"),
+          start_time: startTime ?? "00:00",
+          end_time: endTime ?? "06:00",
+          rate: parseFloat(rate ?? "0") || 0,
+        });
+      }
+      return windows;
+    };
+
+    const collectReferenceWindowsFromForm = (fd: FormData) => {
+      const windows = [];
+      for (let i = 0; i < 24; i++) {
+        const label = fd.get(`reference_window_${i}_label`) as string | null;
+        const dayGroup = fd.get(`reference_window_${i}_day_group`) as string | null;
+        const startTime = fd.get(`reference_window_${i}_start_time`) as string | null;
+        const endTime = fd.get(`reference_window_${i}_end_time`) as string | null;
+        const refPower = fd.get(`reference_window_${i}_reference_power_kw`) as string | null;
+        if (label === null && dayGroup === null && startTime === null && endTime === null && refPower === null) break;
+        windows.push({
+          label: (label ?? "").trim() || `Reference ${i + 1}`,
+          day_group: (dayGroup ?? "all"),
+          start_time: startTime ?? "17:00",
+          end_time: endTime ?? "00:00",
+          reference_power_kw: parseFloat(refPower ?? "0") || 0,
+        });
+      }
+      return windows;
+    };
+
+    const buildConfigPayload = (): Record<string, number | string | boolean | unknown[]> => {
+      const fd = new FormData(form);
+      const data: Record<string, number | string | boolean | unknown[]> = {};
+
+      // Collect all checkboxes first (unchecked ones aren't in FormData)
+      form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
+        data[cb.name] = cb.checked;
+      });
+
+      // Collect per-meter feed-in rates
+      const feedInRates: Array<{ meter_id: string; mode: string; tariff: number; sensor_entity: string }> = [];
+      const ratePattern = /^feed_in_rate_(\d+)_(.+)$/;
+      const rateMap: Record<string, Record<string, string>> = {};
+
+      // Collect per-meter monthly fees
+      const meterFees: Array<{ meter_id: string; label: string; fee: number }> = [];
+      const feePattern = /^meter_fee_(\d+)_(.+)$/;
+      const feeMap: Record<string, Record<string, string>> = {};
+
+      for (const [key, val] of fd.entries()) {
+        if (key.startsWith("consumption_window_") || key.startsWith("reference_window_")) {
+          continue;
+        }
+        const m = key.match(ratePattern);
+        if (m) {
+          const idx = m[1];
+          const field = m[2];
+          if (!rateMap[idx]) rateMap[idx] = {};
+          rateMap[idx][field] = val as string;
+          continue;
+        }
+        const mf = key.match(feePattern);
+        if (mf) {
+          const idx = mf[1];
+          const field = mf[2];
+          if (!feeMap[idx]) feeMap[idx] = {};
+          feeMap[idx][field] = val as string;
+          continue;
+        }
+        if (data[key] !== undefined && typeof data[key] === "boolean") continue;
+        const num = parseFloat(val as string);
+        data[key] = isNaN(num) ? (val as string) : num;
+      }
+
+      for (const idx of Object.keys(rateMap).sort()) {
+        const rm = rateMap[idx];
+        const mode = rm.mode ?? "fixed";
+        const effectiveTariffStr = mode === "sensor" ? (rm.fallback_tariff ?? rm.tariff) : rm.tariff;
+        feedInRates.push({
+          meter_id: rm.meter_id ?? "",
+          mode: mode,
+          tariff: parseFloat(effectiveTariffStr ?? "0.08") || 0.08,
+          sensor_entity: rm.sensor_entity ?? "",
+        });
+      }
+      if (feedInRates.length > 0) data.feed_in_rates = feedInRates;
+
+      for (const idx of Object.keys(feeMap).sort()) {
+        const fm = feeMap[idx];
+        meterFees.push({
+          meter_id: fm.meter_id ?? "",
+          label: fm.label ?? "",
+          fee: parseFloat(fm.fee ?? "0") || 0,
+        });
+      }
+      if (meterFees.length > 0) data.meter_monthly_fees = meterFees;
+
+      data.consumption_rate_windows = collectConsumptionWindowsFromForm(fd);
+      data.reference_power_windows = collectReferenceWindowsFromForm(fd);
+
+      return data;
+    };
+
+    const applyDraftConfigToState = (mutate: (draft: Record<string, number | string | boolean | unknown[]>) => void) => {
+      if (!this.state.config) return;
+      const draft = buildConfigPayload();
+      mutate(draft);
+      this.state.config = { ...this.state.config, ...draft } as BillingConfig;
+      this.renderPreserveMainScroll();
+    };
+
+    this.root.querySelector("#add-consumption-window-btn")?.addEventListener("click", () => {
+      applyDraftConfigToState((draft) => {
+        const windows = Array.isArray(draft.consumption_rate_windows)
+          ? [...draft.consumption_rate_windows as Array<Record<string, unknown>>]
+          : [];
+        windows.push({
+          label: `Window ${windows.length + 1}`,
+          day_group: "weekdays",
+          start_time: "17:00",
+          end_time: "00:00",
+          rate: this.state.config?.energy_variable_rate ?? 0.15,
+        });
+        draft.consumption_rate_windows = windows;
+      });
+    });
+
+    this.root.querySelectorAll(".remove-consumption-window-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt((btn as HTMLElement).dataset.window ?? "0", 10);
+        applyDraftConfigToState((draft) => {
+          const windows = Array.isArray(draft.consumption_rate_windows)
+            ? [...draft.consumption_rate_windows as Array<Record<string, unknown>>]
+            : [];
+          windows.splice(idx, 1);
+          draft.consumption_rate_windows = windows;
+        });
+      });
+    });
+
+    this.root.querySelector("#add-reference-window-btn")?.addEventListener("click", () => {
+      applyDraftConfigToState((draft) => {
+        const windows = Array.isArray(draft.reference_power_windows)
+          ? [...draft.reference_power_windows as Array<Record<string, unknown>>]
+          : [];
+        windows.push({
+          label: `Reference ${windows.length + 1}`,
+          day_group: "weekdays",
+          start_time: "17:00",
+          end_time: "00:00",
+          reference_power_kw: this.state.config?.reference_power_kw ?? 5,
+        });
+        draft.reference_power_windows = windows;
+      });
+    });
+
+    this.root.querySelectorAll(".remove-reference-window-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt((btn as HTMLElement).dataset.window ?? "0", 10);
+        applyDraftConfigToState((draft) => {
+          const windows = Array.isArray(draft.reference_power_windows)
+            ? [...draft.reference_power_windows as Array<Record<string, unknown>>]
+            : [];
+          windows.splice(idx, 1);
+          draft.reference_power_windows = windows;
+        });
+      });
+    });
+
     // ── Per-meter feed-in mode toggles (show/hide fixed vs sensor fields) ──
     form.querySelectorAll<HTMLInputElement>('input[type="radio"][name^="feed_in_rate_"][name$="_mode"]').forEach((radio) => {
       radio.addEventListener("change", () => {
@@ -534,73 +800,7 @@ export class LenedaApp {
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const data: Record<string, number | string | boolean | unknown[]> = {};
-
-      // Collect all checkboxes first (unchecked ones aren't in FormData)
-      form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
-        data[cb.name] = cb.checked;
-      });
-
-      // Collect per-meter feed-in rates
-      const feedInRates: Array<{ meter_id: string; mode: string; tariff: number; sensor_entity: string }> = [];
-      const ratePattern = /^feed_in_rate_(\d+)_(.+)$/;
-      const rateMap: Record<string, Record<string, string>> = {};
-
-      // Collect per-meter monthly fees
-      const meterFees: Array<{ meter_id: string; label: string; fee: number }> = [];
-      const feePattern = /^meter_fee_(\d+)_(.+)$/;
-      const feeMap: Record<string, Record<string, string>> = {};
-
-      for (const [key, val] of fd.entries()) {
-        const m = key.match(ratePattern);
-        if (m) {
-          const idx = m[1];
-          const field = m[2];
-          if (!rateMap[idx]) rateMap[idx] = {};
-          rateMap[idx][field] = val as string;
-          continue; // don't add to flat data
-        }
-        const mf = key.match(feePattern);
-        if (mf) {
-          const idx = mf[1];
-          const field = mf[2];
-          if (!feeMap[idx]) feeMap[idx] = {};
-          feeMap[idx][field] = val as string;
-          continue;
-        }
-        // Skip checkbox entries (already handled above)
-        if (data[key] !== undefined && typeof data[key] === "boolean") continue;
-        const num = parseFloat(val as string);
-        data[key] = isNaN(num) ? (val as string) : num;
-      }
-
-      // Build feed_in_rates array from collected per-meter fields
-      for (const idx of Object.keys(rateMap).sort()) {
-        const rm = rateMap[idx];
-        const mode = rm.mode ?? "fixed";
-        // If fixed mode, use 'tariff'. If sensor mode, prefer 'fallback_tariff' (renamed in Settings.ts)
-        const effectiveTariffStr = mode === "sensor" ? (rm.fallback_tariff ?? rm.tariff) : rm.tariff;
-
-        feedInRates.push({
-          meter_id: rm.meter_id ?? "",
-          mode: mode,
-          tariff: parseFloat(effectiveTariffStr ?? "0.08") || 0.08,
-          sensor_entity: rm.sensor_entity ?? "",
-        });
-      }
-      if (feedInRates.length > 0) data.feed_in_rates = feedInRates;
-
-      // Build meter_monthly_fees array from collected per-meter fields
-      for (const idx of Object.keys(feeMap).sort()) {
-        const fm = feeMap[idx];
-        meterFees.push({
-          meter_id: fm.meter_id ?? "",
-          label: fm.label ?? "",
-          fee: parseFloat(fm.fee ?? "0") || 0,
-        });
-      }
-      if (meterFees.length > 0) data.meter_monthly_fees = meterFees;
+      const data = buildConfigPayload();
 
       try {
         const { saveConfig: save } = await import("../api/leneda");
@@ -690,6 +890,11 @@ export class LenedaApp {
       const startDate = start.slice(0, 10);
       const endDate = end.slice(0, 10);
       const data = await fetchCustomData(startDate, endDate);
+      const consumptionTimeseries = await fetchTimeseries(
+        "1-1:1.29.0",
+        new Date(startDate + "T00:00:00").toISOString(),
+        new Date(endDate + "T23:59:59.999").toISOString(),
+      );
 
       // Switch to custom range with the zoomed period
       this.state.range = "custom";
@@ -707,6 +912,7 @@ export class LenedaApp {
         exceedance_kwh: data.exceedance_kwh ?? 0,
         metering_point: data.metering_point ?? "",
       };
+      this.state.consumptionTimeseries = consumptionTimeseries;
 
       // Partial DOM update — everything except the chart canvas
       this.renderDashboardPartial();

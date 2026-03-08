@@ -93,6 +93,24 @@ export interface MeterConfig {
   types: MeterType[];
 }
 
+export type DayGroup = "all" | "weekdays" | "weekends";
+
+export interface ConsumptionRateWindow {
+  label: string;
+  day_group: DayGroup;
+  start_time: string;
+  end_time: string;
+  rate: number;
+}
+
+export interface ReferencePowerWindow {
+  label: string;
+  day_group: DayGroup;
+  start_time: string;
+  end_time: string;
+  reference_power_kw: number;
+}
+
 /** Per-production-meter feed-in rate configuration. */
 export interface FeedInRate {
   meter_id: string;
@@ -117,9 +135,12 @@ export interface BillingConfig {
   network_power_ref_rate: number;
   network_variable_rate: number;
   reference_power_kw: number;
+  reference_power_windows?: ReferencePowerWindow[];
   exceedance_rate: number;
   /** Global default feed-in tariff — used when a meter has no entry in feed_in_rates */
   feed_in_tariff: number;
+  /** Optional time-of-use supplier rates overriding energy_variable_rate by window. */
+  consumption_rate_windows?: ConsumptionRateWindow[];
   /** Per-production-meter feed-in rate config (mode + tariff/sensor per meter) */
   feed_in_rates?: FeedInRate[];
   /** Per-meter monthly fixed fees (metering costs) */
@@ -133,6 +154,8 @@ export interface BillingConfig {
   gas_vat_rate: number;
   compensation_fund_rate: number;
   electricity_tax_rate: number;
+  /** Positive monthly credit applied before VAT. */
+  connect_discount: number;
   vat_rate: number;
   currency: string;
   meter_has_gas?: boolean;

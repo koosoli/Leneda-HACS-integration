@@ -30,6 +30,9 @@ class LenedaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("Leneda config flow started.")
         errors = {}
 
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
+
         meter_type_selector = sel.SelectSelector(
             sel.SelectSelectorConfig(
                 options=[

@@ -21,12 +21,27 @@ chmod +x start.sh
 ./start.sh
 ```
 
-### Manual
+### Manual Standalone Run (without `.bat` / `.sh`)
 ```bash
+cd frontend-src
+npm install
+npm run build
+cd ../standalone
 node server.js
 ```
 
 The dashboard will be available at **http://localhost:5175**.
+
+### Live Frontend Dev Server (without `dev-start.bat`)
+Use this if you want hot reload while editing the dashboard:
+
+```bash
+cd frontend-src
+npm install
+npm run dev -- --host localhost --port 5175 --strictPort --open
+```
+
+This also serves the dashboard at **http://localhost:5175** and keeps it off port `5174`.
 
 ## First Run
 
