@@ -4,6 +4,17 @@ All notable changes to the **Leneda HACS Integration** will be documented in thi
 
 ## [Unreleased]
 
+## [v2.0.5] - 2026-03-09
+
+### Bug Fixes
+- **Import Hotfix:** Restored the missing `get_effective_reference_power` helper so Home Assistant can import the Leneda integration successfully again.
+- **Reference Power Consistency:** Exceedance calculations now use the same effective reference-power source as the dashboard config and API.
+- **Timeseries API Stability:** Fixed the dashboard timeseries endpoint so it resolves meter routes correctly instead of failing with `routes is not defined`.
+- **Weekly Range Guard:** Fixed Monday and month-boundary date ranges that could send `start > end` requests to Leneda and break dashboard loading with API 400/500 errors.
+
+### Improvements
+- **Repo Consolidation:** Removed the duplicate local codebase so the Git repository is the single source of truth for ongoing work.
+
 ## [v2.0.4] - 2026-03-08
 
 ### New Features

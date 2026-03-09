@@ -560,9 +560,10 @@ class LenedaTimeseriesView(HomeAssistantView):
         obis = request.query.get("obis", "1-1:1.29.0")
         start_str = request.query.get("start")
         end_str = request.query.get("end")
+        routes = _routes_for_obis(hass, obis)
 
         coordinator = _get_first_coordinator(hass)
-        if not coordinator:
+        if not coordinator or not routes:
             return self.json({"error": "no_data"}, status_code=503)
 
         # Default: yesterday
@@ -579,6 +580,9 @@ class LenedaTimeseriesView(HomeAssistantView):
         else:
             start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
             end_dt = start_dt.replace(hour=23, minute=59, second=59)
+
+        if end_dt < start_dt:
+            return self.json({"error": "Invalid date range"}, status_code=400)
 
         try:
             all_results = await _aio.gather(*[

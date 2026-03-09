@@ -29,12 +29,11 @@ from .api import LenedaApiClient
 from .const import (
     DOMAIN,
     OBIS_CODES,
-    CONF_REFERENCE_POWER_ENTITY,
-    CONF_REFERENCE_POWER_STATIC,
     CONF_METERING_POINT_1_TYPES,
     EXTRA_METER_SLOTS,
     CONF_METER_HAS_GAS,
 )
+from .storage import get_effective_reference_power
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -162,6 +161,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 yesterday_end_dt = yesterday_start_dt.replace(hour=23, minute=59, second=59)
 
                 week_start_dt = today_start_dt - timedelta(days=now.weekday())
+                effective_week_end = yesterday_end_dt if yesterday_end_dt >= week_start_dt else now
                 last_week_start_dt = week_start_dt - timedelta(weeks=1)
                 last_week_end_dt = week_start_dt - timedelta(microseconds=1)
 
@@ -196,12 +196,12 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 # Tasks for fetching detailed 15-min data for power-over-reference calculations
                 # We fetch both consumption AND production so exceedance considers solar offset.
                 power_over_ref_tasks = []
-                if self.entry.data.get(CONF_REFERENCE_POWER_ENTITY) or self.entry.data.get(CONF_REFERENCE_POWER_STATIC) is not None:
+                if get_effective_reference_power(self.hass, self.entry) is not None:
                     _LOGGER.debug("Setting up tasks for monthly power over reference data...")
                     power_over_ref_tasks = [
                         # Current month consumption (so far)
                         self.api_client.async_get_metering_data(
-                            self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, month_start_dt, yesterday_end_dt
+                            self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, month_start_dt, effective_month_end
                         ),
                         # Previous month consumption
                         self.api_client.async_get_metering_data(
@@ -209,7 +209,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                         ),
                         # Current month production (so far) — for solar offset
                         self.api_client.async_get_metering_data(
-                            self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, month_start_dt, yesterday_end_dt
+                            self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, month_start_dt, effective_month_end
                         ),
                         # Previous month production — for solar offset
                         self.api_client.async_get_metering_data(
@@ -232,13 +232,13 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     ),
                     # Weekly (current week so far)
                     self.api_client.async_get_aggregated_metering_data(
-                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, week_start_dt, yesterday_end_dt
+                        self._meter_for_obis(CONSUMPTION_CODE), CONSUMPTION_CODE, week_start_dt, effective_week_end
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, week_start_dt, yesterday_end_dt
+                        self._meter_for_obis(PRODUCTION_CODE), PRODUCTION_CODE, week_start_dt, effective_week_end
                     ),
                     self.api_client.async_get_aggregated_metering_data(
-                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, week_start_dt, yesterday_end_dt
+                        self._meter_for_obis(EXPORT_CODE), EXPORT_CODE, week_start_dt, effective_week_end
                     ),
                     # Last Week
                     self.api_client.async_get_aggregated_metering_data(
@@ -279,7 +279,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Setting up extra tasks for %d additional production meters", len(self.production_meters) - 1)
                     period_ranges = [
                         (yesterday_start_dt, yesterday_end_dt, "p_04_yesterday_production", "p_09_yesterday_exported"),
-                        (week_start_dt, yesterday_end_dt, "p_05_weekly_production", "p_17_weekly_exported"),
+                        (week_start_dt, effective_week_end, "p_05_weekly_production", "p_17_weekly_exported"),
                         (last_week_start_dt, last_week_end_dt, "p_06_last_week_production", "p_10_last_week_exported"),
                         (month_start_dt, effective_month_end, "p_07_monthly_production", "p_15_monthly_exported"),
                         (start_of_last_month, end_of_last_month, "p_08_previous_month_production", "p_11_last_month_exported"),
@@ -300,19 +300,19 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                 gas_tasks = {}
                 gas_definitions = {
                     "g_01_yesterday_consumption": (GAS_ENERGY_CODE, yesterday_start_dt, yesterday_end_dt),
-                    "g_02_weekly_consumption": (GAS_ENERGY_CODE, week_start_dt, yesterday_end_dt),
+                    "g_02_weekly_consumption": (GAS_ENERGY_CODE, week_start_dt, effective_week_end),
                     "g_03_last_week_consumption": (GAS_ENERGY_CODE, last_week_start_dt, last_week_end_dt),
-                    "g_04_monthly_consumption": (GAS_ENERGY_CODE, month_start_dt, yesterday_end_dt),
+                    "g_04_monthly_consumption": (GAS_ENERGY_CODE, month_start_dt, effective_month_end),
                     "g_05_last_month_consumption": (GAS_ENERGY_CODE, start_of_last_month, end_of_last_month),
                     "g_10_yesterday_volume": (GAS_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt),
-                    "g_11_weekly_volume": (GAS_VOLUME_CODE, week_start_dt, yesterday_end_dt),
+                    "g_11_weekly_volume": (GAS_VOLUME_CODE, week_start_dt, effective_week_end),
                     "g_12_last_week_volume": (GAS_VOLUME_CODE, last_week_start_dt, last_week_end_dt),
-                    "g_13_monthly_volume": (GAS_VOLUME_CODE, month_start_dt, yesterday_end_dt),
+                    "g_13_monthly_volume": (GAS_VOLUME_CODE, month_start_dt, effective_month_end),
                     "g_14_last_month_volume": (GAS_VOLUME_CODE, start_of_last_month, end_of_last_month),
                     "g_20_yesterday_std_volume": (GAS_STD_VOLUME_CODE, yesterday_start_dt, yesterday_end_dt),
-                    "g_21_weekly_std_volume": (GAS_STD_VOLUME_CODE, week_start_dt, yesterday_end_dt),
+                    "g_21_weekly_std_volume": (GAS_STD_VOLUME_CODE, week_start_dt, effective_week_end),
                     "g_22_last_week_std_volume": (GAS_STD_VOLUME_CODE, last_week_start_dt, last_week_end_dt),
-                    "g_23_monthly_std_volume": (GAS_STD_VOLUME_CODE, month_start_dt, yesterday_end_dt),
+                    "g_23_monthly_std_volume": (GAS_STD_VOLUME_CODE, month_start_dt, effective_month_end),
                     "g_24_last_month_std_volume": (GAS_STD_VOLUME_CODE, start_of_last_month, end_of_last_month),
                 }
 
@@ -538,7 +538,7 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 sharing_periods = [
                     ("yesterday", yesterday_start_dt, yesterday_end_dt),
-                    ("weekly", week_start_dt, yesterday_end_dt),
+                    ("weekly", week_start_dt, effective_week_end),
                     ("last_week", last_week_start_dt, last_week_end_dt),
                     ("monthly", month_start_dt, effective_month_end),
                     ("last_month", start_of_last_month, end_of_last_month),
@@ -599,44 +599,32 @@ class LenedaDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.error("Could not calculate self-consumption values: %s", e)
 
                 # Calculate power usage over reference
-                ref_power_entity = self.entry.data.get(CONF_REFERENCE_POWER_ENTITY)
-                ref_power_static = self.entry.data.get(CONF_REFERENCE_POWER_STATIC)
+                ref_power_kw = get_effective_reference_power(self.hass, self.entry)
 
-                if ref_power_entity or ref_power_static is not None:
+                if ref_power_kw is not None:
                     try:
-                        ref_power_kw = None
-                        if ref_power_entity:
-                            ref_power_state = self.hass.states.get(ref_power_entity)
-                            if ref_power_state and ref_power_state.state not in ("unknown", "unavailable"):
-                                ref_power_kw = float(ref_power_state.state)
-                            else:
-                                _LOGGER.warning(f"Reference power entity {ref_power_entity} not found or unavailable.")
-                        elif ref_power_static is not None:
-                            ref_power_kw = float(ref_power_static)
+                        # Yesterday's calculation — also fetch yesterday's production for solar offset
+                        consumption_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == CONSUMPTION_CODE), None)
+                        production_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == PRODUCTION_CODE), None)
+                        prod_items_yesterday = production_result.get("items") if isinstance(production_result, dict) else None
+                        if isinstance(consumption_result, dict) and consumption_result.get("items"):
+                            overage = self._calculate_power_overage(consumption_result["items"], ref_power_kw, prod_items_yesterday)
+                            data["yesterdays_power_usage_over_reference"] = overage
+                            _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for yesterday (solar-adjusted).")
 
-                        if ref_power_kw is not None:
-                            # Yesterday's calculation — also fetch yesterday's production for solar offset
-                            consumption_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == CONSUMPTION_CODE), None)
-                            production_result = next((res for obis, res in zip(OBIS_CODES.keys(), obis_results) if obis == PRODUCTION_CODE), None)
-                            prod_items_yesterday = production_result.get("items") if isinstance(production_result, dict) else None
-                            if isinstance(consumption_result, dict) and consumption_result.get("items"):
-                                overage = self._calculate_power_overage(consumption_result["items"], ref_power_kw, prod_items_yesterday)
-                                data["yesterdays_power_usage_over_reference"] = overage
-                                _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for yesterday (solar-adjusted).")
-
-                            # Process results for monthly power over reference
-                            # power_over_ref_results: [cur_month_cons, last_month_cons, cur_month_prod, last_month_prod]
-                            if power_over_ref_results:
-                                # Current month's calculation (solar-adjusted)
-                                current_month_cons = power_over_ref_results[0]
-                                current_month_prod = power_over_ref_results[2] if len(power_over_ref_results) > 2 else None
-                                prod_items_cur = current_month_prod.get("items") if isinstance(current_month_prod, dict) else None
-                                if isinstance(current_month_cons, dict) and current_month_cons.get("items"):
-                                    overage = self._calculate_power_overage(current_month_cons["items"], ref_power_kw, prod_items_cur)
-                                    data["current_month_power_usage_over_reference"] = overage
-                                    _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for current month (solar-adjusted).")
-                                elif isinstance(current_month_cons, Exception):
-                                    _LOGGER.error("Error fetching current month power over reference data: %s", current_month_cons)
+                        # Process results for monthly power over reference
+                        # power_over_ref_results: [cur_month_cons, last_month_cons, cur_month_prod, last_month_prod]
+                        if power_over_ref_results:
+                            # Current month's calculation (solar-adjusted)
+                            current_month_cons = power_over_ref_results[0]
+                            current_month_prod = power_over_ref_results[2] if len(power_over_ref_results) > 2 else None
+                            prod_items_cur = current_month_prod.get("items") if isinstance(current_month_prod, dict) else None
+                            if isinstance(current_month_cons, dict) and current_month_cons.get("items"):
+                                overage = self._calculate_power_overage(current_month_cons["items"], ref_power_kw, prod_items_cur)
+                                data["current_month_power_usage_over_reference"] = overage
+                                _LOGGER.debug(f"Calculated {overage:.4f} kWh over reference for current month (solar-adjusted).")
+                            elif isinstance(current_month_cons, Exception):
+                                _LOGGER.error("Error fetching current month power over reference data: %s", current_month_cons)
 
                                 # Last month's calculation (solar-adjusted)
                                 last_month_cons = power_over_ref_results[1]

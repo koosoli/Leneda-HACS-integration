@@ -65,6 +65,7 @@ frontend-src/yarn-error.log
 frontend-src/testem.log
 frontend-src/dist/
 frontend-src/.cache/
+frontend-src/dev/dev-config.json
 
 # OS
 .DS_Store
